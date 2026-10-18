@@ -34,8 +34,57 @@ func _run() -> void:
 	verify(game.rules_dialog != null and game.joker_dialog != null, "Rules and joker selection dialogs initialize")
 	game.start_game()
 	verify(game.game_screen.visible and not game.menu_screen.visible, "Start button shows the game")
-	verify(game.player_hand.size() == 6 and game.bot_hand.size() == 6, "Both players start with six cards")
+	verify(game.player_hand.size() == 6, "Player starts with six cards")
+	verify(game.bot_hand.size() + game.table_cards.size() == 6, "Bot starts with six cards, possibly leading first")
+	verify(game.attacker == 0 or game.attacker == 1, "First move belongs to one of the players")
 	verify(game.deck.size() == 43, "Deck contains 52 normal cards, two jokers and one mark")
+
+	# First move: compare the lowest trump in both hands, not the lowest rank overall.
+	game.trump_mode = "suit"
+	game.trump_suit = "♠"
+	game.player_hand = [normal_card(7, "♠"), normal_card(2, "♥")]
+	game.bot_hand = [normal_card(3, "♠"), normal_card(8, "♣")]
+	verify(game.determine_first_attacker() == 1, "Computer with three of trumps starts before player's seven")
+	game.bot_hand = [normal_card(9, "♠")]
+	verify(game.determine_first_attacker() == 0, "Player with lower trump starts first")
+	game.player_hand = [normal_card(7, "♠")]
+	game.bot_hand = [normal_card(7, "♠")]
+	verify(game.determine_first_attacker() == 0, "Equal lowest trumps give the player first move")
+	game.trump_mode = "red"
+	game.player_hand = [normal_card(5, "♥")]
+	game.bot_hand = [normal_card(3, "♦")]
+	verify(game.determine_first_attacker() == 1, "Both red suits count as trump in double trump mode")
+	game.trump_mode = "none"
+	verify(game.determine_first_attacker() == 0, "No trump gives player the first move")
+
+	verify(game.difficulty_select.item_count == 3, "Menu contains three bot difficulty choices")
+	for level in range(3):
+		game.difficulty_select.select(level)
+		game.start_game()
+		verify(game.bot_difficulty == level, "Bot difficulty selection applies level " + str(level))
+	game.difficulty_select.select(1)
+	game.start_game()
+
+	# Loading a selected photo stores a capped image in user://.
+	var tiny_image: Image = Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	tiny_image.fill(Color("#b759eb"))
+	var chosen_file: String = ProjectSettings.globalize_path("user://test-avatar.png")
+	verify(tiny_image.save_png(chosen_file) == OK, "Test avatar PNG can be created")
+	game.on_avatar_file_selected(chosen_file)
+	verify(game.avatar_texture != null and FileAccess.file_exists(game.AVATAR_SAVE_PATH), "Chosen avatar is saved and shown")
+	game.load_saved_avatar()
+	verify(game.avatar_texture != null, "Avatar survives profile reload")
+	game.clear_avatar()
+	verify(game.avatar_texture == null and not FileAccess.file_exists(game.AVATAR_SAVE_PATH), "Avatar can be removed")
+	DirAccess.remove_absolute(chosen_file)
+
+	# Updating labels must not destroy and recreate unchanged card controls.
+	game.new_game()
+	var first_card_view: Node = game.hand_row.get_child(0)
+	game.update_ui()
+	verify(game.hand_row.get_child(0) == first_card_view, "Unchanged hand views are reused")
+	game.new_game()
+
 	# Pressing "Draw" must take exactly one card, not refill the entire hand.
 	game.player_hand.resize(3)
 	var previous_deck_count: int = game.deck.size()
