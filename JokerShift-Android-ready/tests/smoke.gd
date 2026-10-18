@@ -34,6 +34,31 @@ func _run() -> void:
 	verify(game.rules_dialog != null and game.joker_dialog != null, "Rules and joker selection dialogs initialize")
 	game.start_game()
 	verify(game.game_screen.visible and not game.menu_screen.visible, "Start button shows the game")
+	# Regression: the player nickname used to wrap into a thin vertical strip,
+	# enlarging the avatar row and pushing cards and buttons offscreen.
+	var game_scroll: ScrollContainer = game.game_screen.get_node("GameScroll")
+	var info_row: HBoxContainer = game.game_screen.find_child("PlayerInfoRow", true, false)
+	var avatar_box: PanelContainer = game.game_screen.find_child("PlayerAvatar", true, false)
+	var nickname: Label = game.game_screen.find_child("PlayerNickname", true, false)
+	var hand_scroll: ScrollContainer = game.game_screen.find_child("HandScroll", true, false)
+	var action_buttons: GridContainer = game.game_screen.find_child("ActionButtons", true, false)
+	verify(game_scroll != null and hand_scroll != null and action_buttons != null, "Main game has a scrollable screen with hand and action buttons")
+	verify(nickname != null and nickname.autowrap_mode == TextServer.AUTOWRAP_OFF, "Player nickname never wraps vertically")
+	if game_scroll != null and nickname != null and avatar_box != null and info_row != null:
+		for width in [1152, 360]:
+			get_root().size = Vector2i(width, 648)
+			await process_frame
+			await process_frame
+			game.adapt_layout()
+			await process_frame
+			print("UI_LAYOUT width=", width, " viewport=", game_scroll.size, " row=", info_row.size, " avatar=", avatar_box.size, " nickname=", nickname.size, " hand=", hand_scroll.size, " actions=", action_buttons.size)
+			verify(info_row.size.y <= 64.0 and avatar_box.size.y <= 60.0, "Player info stays compact at width " + str(width))
+			verify(nickname.size.x >= 150.0, "Nickname remains readable at width " + str(width))
+			verify(hand_scroll.size.y >= 120.0 and action_buttons.size.y >= 90.0, "Hand and action buttons have usable space at width " + str(width))
+	get_root().size = Vector2i(720, 1280)
+	await process_frame
+	game.adapt_layout()
+
 	verify(game.player_hand.size() == 6, "Player starts with six cards")
 	verify(game.bot_hand.size() + game.table_cards.size() == 6, "Bot starts with six cards, possibly leading first")
 	verify(game.attacker == 0 or game.attacker == 1, "First move belongs to one of the players")
