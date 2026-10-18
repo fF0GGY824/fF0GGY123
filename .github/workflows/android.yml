@@ -68,6 +68,12 @@ jobs:
           fi
       - name: Import Godot project
         run: godot --headless --path JokerShift-Android-ready --editor --import --quit
+      - name: Test original game mechanics and UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path JokerShift-Android-ready --script res://tests/smoke.gd 2>&1 | tee /tmp/jokershift-smoke.log
+          grep -F "JOKERSHIFT FULL-GAME SMOKE TEST PASSED" /tmp/jokershift-smoke.log
       - name: Diagnose export environment
         shell: bash
         run: |
