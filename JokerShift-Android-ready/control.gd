@@ -18,6 +18,9 @@ var discard_pile: Array = []
 var trump_mode: String = "suit"
 var trump_suit: String = ""
 
+# 0 = лёгкий, 1 = средний, 2 = сложный
+var bot_difficulty: int = 1
+
 # 0 = игрок атакует, 1 = бот атакует
 var attacker: int = 0
 var first_round: bool = true
@@ -32,6 +35,7 @@ var status_text: String = ""
 var menu_screen: Control
 var game_screen: Control
 var nick_input: LineEdit
+var difficulty_select: OptionButton
 
 var rules_dialog: AcceptDialog
 var result_dialog: AcceptDialog
@@ -580,6 +584,8 @@ func start_game() -> void:
 	if player_nick.is_empty():
 		player_nick = "Игрок"
 
+	bot_difficulty = difficulty_select.selected
+	save_profile()
 	menu_screen.hide()
 	game_screen.show()
 
@@ -950,11 +956,38 @@ func new_game() -> void:
 	draw_to_six(player_hand)
 	draw_to_six(bot_hand)
 
-	status_text = "Твой ход! Выбери карту и нажми на стол."
+	attacker = determine_first_attacker()
+	if attacker == 1:
+		status_text = "У компьютера младший козырь — он ходит первым."
+	else:
+		status_text = "Твой первый ход: у тебя младший козырь или ничья."
 
 	adapt_layout()
 	update_ui()
 	pulse(deck_panel)
+
+	if attacker == 1:
+		bot_attack()
+
+
+# First lead is decided by the lowest ordinary trump in either hand.
+# Special cards have no ordinary trump rank; ties favor the player.
+func lowest_trump_rank(hand: Array) -> int:
+	var lowest: int = 999
+	for card in hand:
+		if is_special(card):
+			continue
+		if is_trump(card):
+			lowest = mini(lowest, card_rank(card))
+	return lowest
+
+
+func determine_first_attacker() -> int:
+	var player_lowest: int = lowest_trump_rank(player_hand)
+	var bot_lowest: int = lowest_trump_rank(bot_hand)
+	if bot_lowest < player_lowest:
+		return 1
+	return 0
 
 
 func setup_trump(card: Dictionary) -> void:
@@ -1803,6 +1836,9 @@ func bot_matching_card(index: int) -> Dictionary:
 
 
 func bot_try_transfer() -> bool:
+	if bot_difficulty == 0:
+		# Easy bot does not transfer attacks.
+		return false
 	if attacker != 0:
 		return false
 
@@ -1830,7 +1866,8 @@ func bot_try_transfer() -> bool:
 	if best_index == -1:
 		return false
 
-	if randi_range(1, 100) > 45:
+	var transfer_chance: int = 40 if bot_difficulty == 1 else 85
+	if randi_range(1, 100) > transfer_chance:
 		return false
 
 	bot_hand.remove_at(best_index)
@@ -1863,6 +1900,12 @@ func bot_defend() -> void:
 	if bot_try_transfer():
 		return
 
+	if bot_difficulty == 0 and randi_range(1, 100) <= 28:
+		bot_takes = true
+		status_text = "Компьютер (лёгкий) забирает. Подкинь или нажми «Бито!»."
+		update_ui()
+		return
+
 	while true:
 		var pair_index: int = unbeaten_pair()
 
@@ -1892,6 +1935,11 @@ func bot_defend() -> void:
 			for test_card in possibilities:
 				if can_beat(test_card, attack_card):
 					var cost: int = bot_cost(test_card)
+					if bot_difficulty == 0:
+						cost = randi_range(0, 999)
+					elif bot_difficulty == 2:
+						cost += 70 if is_trump(test_card) else 0
+						cost += 100 if is_joker(test_card) else 0
 
 					if cost < best_cost:
 						best_index = i
@@ -1965,7 +2013,8 @@ func bot_throw() -> void:
 		update_ui()
 		return
 
-	if randi_range(1, 100) > 70:
+	var throw_chance: int = 20 if bot_difficulty == 0 else (70 if bot_difficulty == 1 else 95)
+	if randi_range(1, 100) > throw_chance:
 		status_text = (
 			"Компьютер больше не подкидывает. "
 			+ "Нажми «Бито!»."
@@ -1994,19 +2043,28 @@ func bot_attack() -> void:
 	draw_to_six(bot_hand)
 
 	var best_index: int = -1
+	var best_score: int = 99999
 
 	for i in range(bot_hand.size()):
-		if is_special(bot_hand[i]):
+		var candidate: Dictionary = bot_hand[i]
+		if is_special(candidate):
 			continue
 
-		if best_index == -1:
-			best_index = i
-
-		elif (
-			card_rank(bot_hand[i])
-			< card_rank(bot_hand[best_index])
-		):
-			best_index = i
+		if bot_difficulty == 0:
+			# Easy chooses a random ordinary card.
+			if best_index == -1 or randi_range(0, 1) == 0:
+				best_index = i
+		else:
+			var score: int = card_rank(candidate)
+			if bot_difficulty == 2:
+				score = economy_cost(candidate)
+				# Hard favors ranks it can throw again.
+				for j in range(bot_hand.size()):
+					if i != j and card_rank(bot_hand[j]) == card_rank(candidate):
+						score -= 12
+			if score < best_score:
+				best_index = i
+				best_score = score
 
 	if best_index == -1:
 		check_winner()
