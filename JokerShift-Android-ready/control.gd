@@ -68,6 +68,12 @@ var table_grid: GridContainer
 var hand_row: HBoxContainer
 var deck_panel: PanelContainer
 var field_panel: GameField
+var battle_layout: GridContainer
+var deck_info: HBoxContainer
+var battle_scroll: ScrollContainer
+var landscape_mode: bool = false
+var slot_width: float = 78.0
+var slot_height: float = 132.0
 
 var card_width: float = 74.0
 var card_height: float = 110.0
@@ -842,117 +848,105 @@ func create_game_screen() -> void:
 	bot_label = make_label("", 16)
 	root.add_child(bot_label)
 
-	# Центральная часть: стол и колода.
-	var middle: HBoxContainer = HBoxContainer.new()
-
-	middle.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	middle.add_theme_constant_override("separation", 5)
-
-	root.add_child(middle)
+	# Five slots in each of two rows. Portrait stacks the compact
+	# trump/deck information underneath the table; landscape uses a rail.
+	battle_layout = GridContainer.new()
+	battle_layout.name = "BattleLayout"
+	battle_layout.columns = 2
+	battle_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	battle_layout.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	battle_layout.add_theme_constant_override("h_separation", 8)
+	battle_layout.add_theme_constant_override("v_separation", 6)
+	root.add_child(battle_layout)
 
 	field_panel = GameField.new()
+	field_panel.name = "BattleField"
 	field_panel.game = self
-
+	field_panel.custom_minimum_size = Vector2(280, 225)
 	field_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	field_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
 	field_panel.add_theme_stylebox_override(
-		"panel",
-		make_style(
-			Color("#1D0E30"),
-			Color("#68379B"),
-			14
-		)
+		"panel", make_style(Color("#1D0E30"), Color("#68379B"), 14)
 	)
-
-	middle.add_child(field_panel)
+	battle_layout.add_child(field_panel)
 
 	var field_column: VBoxContainer = VBoxContainer.new()
-
+	field_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	field_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	field_column.mouse_filter = Control.MOUSE_FILTER_PASS
+	field_column.add_theme_constant_override("separation", 6)
 	field_panel.add_child(field_column)
 
-	var field_title: Label = make_label(
-		"ИГРОВОЙ СТОЛ",
-		13,
-		GOLD
-	)
-
+	var field_title: Label = make_label("ИГРОВОЙ СТОЛ · 2 × 5", 13, GOLD)
 	field_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	field_column.add_child(field_title)
 
-	var table_scroll: ScrollContainer = ScrollContainer.new()
+	battle_scroll = ScrollContainer.new()
+	battle_scroll.name = "TableScroll"
+	battle_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	battle_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	battle_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	battle_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	battle_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	field_column.add_child(battle_scroll)
 
-	table_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	table_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
-
-	field_column.add_child(table_scroll)
+	var grid_center: CenterContainer = CenterContainer.new()
+	grid_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_center.mouse_filter = Control.MOUSE_FILTER_PASS
+	battle_scroll.add_child(grid_center)
 
 	table_grid = GridContainer.new()
-	table_grid.columns = 2
+	table_grid.name = "TableSlots"
+	table_grid.columns = 5
+	table_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	table_grid.mouse_filter = Control.MOUSE_FILTER_PASS
+	table_grid.add_theme_constant_override("h_separation", 6)
+	table_grid.add_theme_constant_override("v_separation", 7)
+	grid_center.add_child(table_grid)
 
-	table_grid.add_theme_constant_override(
-		"h_separation",
-		5
-	)
+	# Compact info rail: can sit at the right or below the table.
+	deck_info = HBoxContainer.new()
+	deck_info.name = "DeckInfo"
+	deck_info.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	deck_info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	deck_info.add_theme_constant_override("separation", 12)
+	battle_layout.add_child(deck_info)
 
-	table_grid.add_theme_constant_override(
-		"v_separation",
-		6
-	)
-
-	table_scroll.add_child(table_grid)
-
-	# Колода справа.
-	var deck_column: VBoxContainer = VBoxContainer.new()
-
-	deck_column.custom_minimum_size = Vector2(82, 0)
-	deck_column.add_theme_constant_override(
-		"separation",
-		7
-	)
-
-	middle.add_child(deck_column)
-
-	deck_column.add_child(
-		make_label("КОЛОДА", 12, GOLD)
-	)
+	var deck_section: VBoxContainer = VBoxContainer.new()
+	deck_section.add_theme_constant_override("separation", 4)
+	deck_info.add_child(deck_section)
+	deck_section.add_child(make_label("КОЛОДА", 12, GOLD))
 
 	deck_panel = PanelContainer.new()
-	deck_panel.custom_minimum_size = Vector2(78, 110)
-
+	deck_panel.custom_minimum_size = Vector2(68, 82)
 	deck_panel.add_theme_stylebox_override(
-		"panel",
-		make_style(
-			Color("#6324A1"),
-			Color("#D9A5FF"),
-			10
-		)
+		"panel", make_style(Color("#6324A1"), Color("#D9A5FF"), 10)
 	)
-
-	deck_column.add_child(deck_panel)
+	deck_section.add_child(deck_panel)
 
 	var deck_art: VBoxContainer = VBoxContainer.new()
+	deck_art.add_theme_constant_override("separation", 0)
 	deck_panel.add_child(deck_art)
+	deck_art.add_child(make_label("✦", 23))
+	deck_art.add_child(make_label("JOKER", 10))
+	deck_art.add_child(make_label("SHIFT", 10))
 
-	deck_art.add_child(make_label("✦", 32))
-	deck_art.add_child(make_label("JOKER", 11))
-	deck_art.add_child(make_label("SHIFT", 11))
+	deck_label = make_label("", 12)
+	deck_section.add_child(deck_label)
 
-	# A permanent trump display, separate from the deck card.
-	# The graphic never relies on unavailable playing-card font glyphs.
-	deck_column.add_child(make_label("КОЗЫРЬ", 13, GOLD))
+	var trump_section: VBoxContainer = VBoxContainer.new()
+	trump_section.add_theme_constant_override("separation", 4)
+	deck_info.add_child(trump_section)
+	trump_section.add_child(make_label("КОЗЫРЬ", 12, GOLD))
+
 	trump_icon_row = HBoxContainer.new()
 	trump_icon_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	trump_icon_row.custom_minimum_size = Vector2(82, 48)
-	deck_column.add_child(trump_icon_row)
+	trump_icon_row.custom_minimum_size = Vector2(74, 44)
+	trump_section.add_child(trump_icon_row)
 
 	trump_label = make_label("", 12, GOLD)
-	deck_column.add_child(trump_label)
-
-	deck_label = make_label("", 13)
-	deck_column.add_child(deck_label)
+	trump_label.custom_minimum_size = Vector2(74, 29)
+	trump_section.add_child(trump_label)
 
 	# Сообщение.
 	status_label = make_label("", 13)
@@ -1103,23 +1097,46 @@ func show_rules() -> void:
 # ==========================================
 
 func adapt_layout() -> void:
-	var width: float = get_viewport_rect().size.x
-	# Card sizes change when the viewport changes; invalidate caches.
+	var viewport_size: Vector2 = get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+
+	# Portrait: wide table + deck beneath it.
+	# Landscape: wide table + compact deck to its right.
+	var portrait: bool = viewport_size.y >= viewport_size.x
+	landscape_mode = not portrait
+
+	if battle_layout != null:
+		battle_layout.columns = 1 if portrait else 2
+	if deck_info != null:
+		deck_info.size_flags_horizontal = (
+			Control.SIZE_SHRINK_CENTER if portrait
+			else Control.SIZE_SHRINK_END
+		)
+
+	var reserved: float = 28.0 if portrait else 214.0
+	var table_space: float = maxf(270.0, viewport_size.x - reserved)
+	# Exactly 5 visible places per row. Defense overlaps attack
+	# inside the same slot instead of producing a third/fourth row.
+	card_width = clampf((table_space - 48.0) / 5.0 - 9.0, 42.0, 94.0)
+	card_height = card_width * 1.40
+	slot_width = card_width + 9.0
+	slot_height = card_height + 26.0
+
+	if field_panel != null:
+		field_panel.custom_minimum_size = Vector2(
+			slot_width * 5.0 + 4.0 * 6.0 + 16.0,
+			slot_height * 2.0 + 7.0 + 48.0
+		)
+
+	if table_grid != null:
+		table_grid.columns = 5
+
 	last_table_visual_key = ""
 	last_hand_visual_key = ""
 
-	card_width = clampf(width * 0.19, 54.0, 82.0)
-	card_height = card_width * 1.48
-
-	if table_grid != null:
-		if width < 550.0:
-			table_grid.columns = 2
-		else:
-			table_grid.columns = 3
-
 	if game_screen != null and game_screen.visible:
 		update_ui()
-
 
 # ==========================================
 # НОВАЯ ИГРА
@@ -2646,77 +2663,75 @@ func update_ui() -> void:
 	deck_panel.visible = not deck.is_empty()
 	status_label.text = status_text
 
-	var table_key: String = JSON.stringify(table_cards)
+	var table_key: String = JSON.stringify(table_cards) + "|" + str(snapped(card_width, 0.1))
 	if table_key != last_table_visual_key:
 		last_table_visual_key = table_key
 		clear_children(table_grid)
 
-		# Пустой стол.
-		if table_cards.is_empty():
-			var empty_button: Button = make_button(
-				"НАЖМИ СЮДА\nДЛЯ ХОДА",
-				field_pressed
-			)
+		for i in range(10):
+			# Each place holds an attack and its covering defense.
+			# Ten places remain visible even with fewer cards.
+			var slot: Control = Control.new()
+			slot.name = "Slot_%d" % i
+			slot.custom_minimum_size = Vector2(slot_width, slot_height)
+			slot.mouse_filter = Control.MOUSE_FILTER_PASS
+			table_grid.add_child(slot)
 
-			empty_button.custom_minimum_size = Vector2(
-				135,
-				90
-			)
-
-			table_grid.add_child(empty_button)
-
-		# Карты на столе.
-		for i in range(table_cards.size()):
-			var pair: Dictionary = table_cards[i]
-
-			var column: VBoxContainer = VBoxContainer.new()
-
-			column.add_theme_constant_override(
-				"separation",
-				3
-			)
-
-			var attack_card: GameCard = make_card_view(
-				pair["attack"],
-				"attack",
-				-1,
-				i
-			)
-
-			column.add_child(attack_card)
-
-			if pair["defense"].is_empty():
-				var defense_target: Button = make_button(
-					"↓ Защита",
-					table_card_pressed.bind(
-						"attack",
-						i
+			if i >= table_cards.size():
+				var empty_place: PanelContainer = PanelContainer.new()
+				empty_place.custom_minimum_size = Vector2(
+					card_width, card_height
+				)
+				empty_place.add_theme_stylebox_override(
+					"panel",
+					make_style(
+						Color("#241238"),
+						Color("#58377A"),
+						9
 					)
 				)
+				slot.add_child(empty_place)
+				empty_place.position = Vector2(4, 2)
 
-				defense_target.custom_minimum_size = Vector2(
-					card_width,
-					35
+				if i == 0 and attacker == 0:
+					# First empty place starts the attack on mouse/touch.
+					var first_button: Button = make_button(
+						"ХОД", field_pressed
+					)
+					first_button.custom_minimum_size = Vector2(
+						card_width, 32
+					)
+					slot.add_child(first_button)
+					first_button.position = Vector2(4, card_height * 0.5)
+				continue
+
+			var pair: Dictionary = table_cards[i]
+			var attack_card: GameCard = make_card_view(
+				pair["attack"], "attack", -1, i
+			)
+			slot.add_child(attack_card)
+			attack_card.position = Vector2(0, 0)
+
+			if pair["defense"].is_empty():
+				var defend_button: Button = make_button(
+					"↘", table_card_pressed.bind("attack", i)
 				)
-
-				column.add_child(defense_target)
-
+				defend_button.custom_minimum_size = Vector2(
+					card_width, 26
+				)
+				slot.add_child(defend_button)
+				defend_button.position = Vector2(
+					0, card_height + 1
+				)
 			else:
 				var defense_card: GameCard = make_card_view(
-					pair["defense"],
-					"defense",
-					-1,
-					i
+					pair["defense"], "defense", -1, i
 				)
+				slot.add_child(defense_card)
+				# A small diagonal shift makes both cards visible.
+				defense_card.position = Vector2(9, 20)
 
-				column.add_child(defense_card)
-
-			table_grid.add_child(column)
-
-			animate_in(
-				column,
-				minf(float(i) * 0.035, 0.15)
-			)
+			animate_in(slot, minf(float(i) * 0.02, 0.16))
 
 	# Карты игрока.
 	var hand_key: String = JSON.stringify(player_hand) + "|" + str(selected_index)
