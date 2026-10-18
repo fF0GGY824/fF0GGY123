@@ -2756,25 +2756,32 @@ func update_ui() -> void:
 	deck_panel.visible = not deck.is_empty()
 	status_label.text = status_text
 
-	var table_key: String = JSON.stringify(table_cards) + "|" + str(snapped(card_width, 0.1))
+	var table_key: String = (
+		JSON.stringify(table_cards)
+		+ "|" + str(snapped(card_width, 0.1))
+		+ "|" + str(selected_index)
+		+ "|" + str(attacker)
+		+ "|" + str(bot_takes)
+	)
 	if table_key != last_table_visual_key:
 		last_table_visual_key = table_key
 		clear_children(table_grid)
 
 		for i in range(10):
-			# Each place holds an attack and its covering defense.
-			# Ten places remain visible even with fewer cards.
-			var slot: Control = Control.new()
+			# Every square is a touch target and an actual drop destination.
+			var slot: TableSlot = TableSlot.new()
 			slot.name = "Slot_%d" % i
+			slot.game = self
+			slot.slot_id = i
 			slot.custom_minimum_size = Vector2(slot_width, slot_height)
-			slot.mouse_filter = Control.MOUSE_FILTER_PASS
 			table_grid.add_child(slot)
 
-			if i >= table_cards.size():
+			var pair_index: int = pair_at_slot(i)
+			if pair_index == -1:
+				# Decorative empty cell does not block taps or drag-drop.
 				var empty_place: PanelContainer = PanelContainer.new()
-				empty_place.custom_minimum_size = Vector2(
-					card_width, card_height
-				)
+				empty_place.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				empty_place.custom_minimum_size = Vector2(card_width, card_height)
 				empty_place.add_theme_stylebox_override(
 					"panel",
 					make_style(
@@ -2786,42 +2793,38 @@ func update_ui() -> void:
 				slot.add_child(empty_place)
 				empty_place.position = Vector2(4, 2)
 
-				if i == 0 and attacker == 0:
-					# First empty place starts the attack on mouse/touch.
-					var first_button: Button = make_button(
-						"ХОД", field_pressed
+				if selected_index >= 0 and can_drop_on_slot(selected_index, i):
+					var hint: Label = make_label(
+						"ХОД" if attacker == 0 else "ПЕРЕВОД",
+						10,
+						GOLD
 					)
-					first_button.custom_minimum_size = Vector2(
-						card_width, 32
-					)
-					slot.add_child(first_button)
-					first_button.position = Vector2(4, card_height * 0.5)
+					hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					hint.custom_minimum_size = Vector2(card_width, 30)
+					slot.add_child(hint)
+					hint.position = Vector2(4, card_height * 0.40)
 				continue
 
-			var pair: Dictionary = table_cards[i]
+			var pair: Dictionary = table_cards[pair_index]
 			var attack_card: GameCard = make_card_view(
-				pair["attack"], "attack", -1, i
+				pair["attack"], "attack", -1, pair_index
 			)
 			slot.add_child(attack_card)
-			attack_card.position = Vector2(0, 0)
+			attack_card.position = Vector2.ZERO
 
 			if pair["defense"].is_empty():
 				var defend_button: Button = make_button(
-					"↘", table_card_pressed.bind("attack", i)
+					"↘ ЗАЩИТА", table_card_pressed.bind("attack", pair_index)
 				)
-				defend_button.custom_minimum_size = Vector2(
-					card_width, 26
-				)
+				defend_button.custom_minimum_size = Vector2(card_width, 26)
+				defend_button.add_theme_font_size_override("font_size", 10)
 				slot.add_child(defend_button)
-				defend_button.position = Vector2(
-					0, card_height + 1
-				)
+				defend_button.position = Vector2(0, card_height + 1)
 			else:
 				var defense_card: GameCard = make_card_view(
-					pair["defense"], "defense", -1, i
+					pair["defense"], "defense", -1, pair_index
 				)
 				slot.add_child(defense_card)
-				# A small diagonal shift makes both cards visible.
 				defense_card.position = Vector2(9, 20)
 
 			animate_in(slot, minf(float(i) * 0.02, 0.16))
