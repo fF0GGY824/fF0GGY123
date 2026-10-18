@@ -2482,8 +2482,6 @@ func bot_attack() -> void:
 	table_cards.append({
 		"attack": card,
 		"defense": {},
-		"slot_id": free_table_slot(),
-		"slot_id": free_table_slot(),
 		"slot_id": free_table_slot()
 	})
 
