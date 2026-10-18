@@ -1,0 +1,25 @@
+name: Build JokerShift APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.5.2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Import Godot project
+        run: godot --headless --path JokerShift-Android-ready --editor --import --quit
+      - name: Export Android APK
+        run: |
+          mkdir -p build
+          godot --headless --path JokerShift-Android-ready --export-debug Android "$GITHUB_WORKSPACE/build/JokerShift.apk"
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: JokerShift-Android-APK
+          path: build/JokerShift.apk
+          if-no-files-found: error
