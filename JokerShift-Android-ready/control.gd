@@ -82,6 +82,7 @@ var card_height: float = 110.0
 var pending_joker_action: String = ""
 var pending_joker_index: int = -1
 var pending_pair_index: int = -1
+var pending_slot_id: int = -1
 
 
 # ==========================================
@@ -297,26 +298,18 @@ class GameCard extends Button:
 			"index": hand_index
 		}
 
-	func _can_drop_data(
-		_position: Vector2,
-		data: Variant
-	) -> bool:
-		if role == "hand":
+	func _can_drop_data(_position: Vector2, data: Variant) -> bool:
+		if role == "hand" or typeof(data) != TYPE_DICTIONARY:
 			return false
-
-		if typeof(data) != TYPE_DICTIONARY:
+		if data.get("type", "") != "hand_card":
 			return false
+		var slot_id: int = game.slot_for_pair(pair_index)
+		return game.can_drop_on_slot(int(data.get("index", -1)), slot_id)
 
-		return data.get("type", "") == "hand_card"
-
-	func _drop_data(
-		_position: Vector2,
-		data: Variant
-	) -> void:
-		game.play_hand_card(
+	func _drop_data(_position: Vector2, data: Variant) -> void:
+		game.place_in_slot(
 			int(data["index"]),
-			role,
-			pair_index
+			game.slot_for_pair(pair_index)
 		)
 
 
@@ -324,27 +317,55 @@ class GameCard extends Button:
 # ИГРОВОЕ ПОЛЕ
 # ==========================================
 
+# Each square of the 5x2 table is an actual touch and drag target.
+class TableSlot extends Control:
+	var game
+	var slot_id: int = 0
+	var hover: bool = false
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		mouse_entered.connect(_on_hover.bind(true))
+		mouse_exited.connect(_on_hover.bind(false))
+
+	func _on_hover(active: bool) -> void:
+		hover = active
+		queue_redraw()
+
+	func _draw() -> void:
+		if game == null:
+			return
+		if game.selected_index < 0 or game.selected_index >= game.player_hand.size():
+			return
+		if not game.can_drop_on_slot(game.selected_index, slot_id):
+			return
+		var color: Color = game.GOLD if hover else game.VIOLET
+		draw_rect(Rect2(Vector2.ZERO, size), color, false, 2.0)
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+				game.place_selected_on_slot(slot_id)
+				accept_event()
+
+	func _can_drop_data(_position: Vector2, data: Variant) -> bool:
+		return (
+			typeof(data) == TYPE_DICTIONARY
+			and data.get("type", "") == "hand_card"
+			and game.can_drop_on_slot(int(data.get("index", -1)), slot_id)
+		)
+
+	func _drop_data(_position: Vector2, data: Variant) -> void:
+		game.place_in_slot(int(data["index"]), slot_id)
+
+
 class GameField extends PanelContainer:
 	var game
 
-	func _can_drop_data(
-		_position: Vector2,
-		data: Variant
-	) -> bool:
-		if typeof(data) != TYPE_DICTIONARY:
-			return false
-
-		return data.get("type", "") == "hand_card"
-
-	func _drop_data(
-		_position: Vector2,
-		data: Variant
-	) -> void:
-		game.play_hand_card(
-			int(data["index"]),
-			"field",
-			-1
-		)
+	# Drops are handled by individual TableSlot nodes, not the entire field.
+	func _can_drop_data(_position: Vector2, _data: Variant) -> bool:
+		return false
 
 
 # ==========================================
@@ -1177,6 +1198,7 @@ func new_game() -> void:
 
 	selected_index = -1
 	selected_pair = -1
+	pending_slot_id = -1
 
 	joker_dialog.hide()
 	result_dialog.hide()
@@ -1507,11 +1529,135 @@ func table_has_rank(rank: int) -> bool:
 	return false
 
 
+# A pair can live in any visible square. Old saved/test pairs without
+# slot_id fall back to insertion order for backward compatibility.
+func slot_for_pair(pair_index: int) -> int:
+	if pair_index < 0 or pair_index >= table_cards.size():
+		return -1
+	return int(table_cards[pair_index].get("slot_id", pair_index))
+
+
+func pair_at_slot(slot_id: int) -> int:
+	if slot_id < 0 or slot_id >= 10:
+		return -1
+	for i in range(table_cards.size()):
+		if slot_for_pair(i) == slot_id:
+			return i
+	return -1
+
+
+func free_table_slot(preferred: int = -1) -> int:
+	if preferred >= 0 and preferred < 10 and pair_at_slot(preferred) == -1:
+		return preferred
+	for slot_id in range(10):
+		if pair_at_slot(slot_id) == -1:
+			return slot_id
+	return -1
+
+
+# Validate potential drops BEFORE showing a drop marker; invalid moves
+# leave cards in the player's hand rather than silently moving them.
+func can_drop_on_slot(hand_index: int, slot_id: int) -> bool:
+	if finished or hand_index < 0 or hand_index >= player_hand.size():
+		return false
+	if slot_id < 0 or slot_id >= 10:
+		return false
+	var card: Dictionary = player_hand[hand_index]
+	var pair_index: int = pair_at_slot(slot_id)
+
+	if attacker == 0:
+		if pair_index != -1:
+			return false
+		if table_cards.is_empty():
+			return not is_special(card)
+		if table_cards.size() >= round_limit():
+			return false
+		if not bot_takes and not all_defended():
+			return false
+		# Jokers can copy one of the ranks already on the table.
+		return (
+			is_joker(card)
+			or (card_rank(card) != 100 and table_has_rank(card_rank(card)))
+		)
+
+	if pair_index != -1:
+		var pair: Dictionary = table_cards[pair_index]
+		if pair["defense"].is_empty():
+			return is_joker(card) or can_beat(card, pair["attack"])
+		return (
+			is_joker(card)
+			or (
+				can_beat(card, pair["attack"])
+				and economy_cost(card) < economy_cost(pair["defense"])
+			)
+		)
+
+	# Translation is deliberately performed by placing an equal-rank
+	# card into an EMPTY square, not on top of an attacking card.
+	if not can_transfer():
+		return false
+	if bot_hand.size() < table_cards.size() + 1:
+		return false
+	if is_joker(card):
+		return true
+	return card_rank(card) != 100 and table_has_rank(card_rank(card))
+
+
+func place_selected_on_slot(slot_id: int) -> void:
+	if selected_index < 0 or selected_index >= player_hand.size():
+		status_text = "Сначала выбери карту из руки."
+		update_ui()
+		return
+	place_in_slot(selected_index, slot_id)
+
+
+func place_in_slot(hand_index: int, slot_id: int) -> void:
+	if not can_drop_on_slot(hand_index, slot_id):
+		status_text = "Сюда эту карту положить нельзя."
+		update_ui()
+		return
+
+	selected_index = hand_index
+	var card: Dictionary = player_hand[hand_index]
+	var pair_index: int = pair_at_slot(slot_id)
+
+	if attacker == 0:
+		if table_cards.is_empty():
+			player_attack(hand_index, slot_id)
+		elif is_joker(card):
+			pending_slot_id = slot_id
+			show_joker_choices("throw", hand_index, -1)
+		else:
+			player_throw(hand_index, card, slot_id)
+		return
+
+	if pair_index == -1:
+		if is_joker(card):
+			pending_slot_id = slot_id
+			show_joker_choices("transfer", hand_index, -1)
+		else:
+			player_transfer(hand_index, card, slot_id)
+		return
+
+	if table_cards[pair_index]["defense"].is_empty():
+		if is_joker(card):
+			show_joker_choices("defend", hand_index, pair_index)
+		else:
+			player_defend(hand_index, pair_index, card)
+	else:
+		if is_joker(card):
+			show_joker_choices("replace", hand_index, pair_index)
+		else:
+			player_replace(hand_index, pair_index, card)
+
+
 func can_transfer() -> bool:
 	if table_cards.is_empty():
 		return false
 
 	if table_cards.size() >= round_limit():
+		return false
+	if free_table_slot() == -1:
 		return false
 
 	for pair in table_cards:
@@ -1541,133 +1687,34 @@ func economy_cost(card: Dictionary) -> int:
 # ==========================================
 
 func select_card(index: int) -> void:
-	if finished:
+	if finished or index < 0 or index >= player_hand.size():
 		return
-
-	if index < 0 or index >= player_hand.size():
-		return
-
 	selected_index = index
-
-	status_text = (
-		"Выбрана "
-		+ card_name(player_hand[index])
-		+ ". Нажми на стол."
-	)
-
+	if attacker == 0:
+		status_text = (
+			"Карта выбрана. Нажми свободную ячейку для хода."
+		)
+	else:
+		status_text = (
+			"На атаку — отбиться; в пустую ячейку — перевести."
+		)
 	update_ui()
 
 
 func field_pressed() -> void:
+	place_selected_on_slot(free_table_slot())
+
+
+func table_card_pressed(role: String, pair_index: int) -> void:
+	if pair_index < 0 or pair_index >= table_cards.size():
+		return
+	var slot_id: int = slot_for_pair(pair_index)
 	if selected_index >= 0:
-		play_hand_card(
-			selected_index,
-			"field",
-			-1
-		)
-
-
-func table_card_pressed(
-	role: String,
-	pair_index: int
-) -> void:
-	if selected_index >= 0:
-		play_hand_card(
-			selected_index,
-			role,
-			pair_index
-		)
-
+		place_selected_on_slot(slot_id)
 	elif role == "attack" and attacker == 1:
 		selected_pair = pair_index
-
-		status_text = (
-			"Выбрана атака. "
-			+ "Теперь выбери карту из руки."
-		)
-
+		status_text = "Выбери карту для защиты и нажми на атаку."
 		update_ui()
-
-
-func play_hand_card(
-	index: int,
-	role: String,
-	pair_index: int
-) -> void:
-	if finished:
-		return
-
-	if index < 0 or index >= player_hand.size():
-		return
-
-	var card: Dictionary = player_hand[index]
-	selected_index = index
-
-	if table_cards.is_empty():
-		if attacker == 0:
-			player_attack(index)
-		return
-
-	if attacker == 0:
-		if is_joker(card):
-			show_joker_choices("throw", index, -1)
-		else:
-			player_throw(index, card)
-		return
-
-	if role == "defense":
-		if is_joker(card):
-			show_joker_choices(
-				"replace",
-				index,
-				pair_index
-			)
-		else:
-			player_replace(
-				index,
-				pair_index,
-				card
-			)
-		return
-
-	if role == "attack" and pair_index >= 0:
-		selected_pair = pair_index
-
-	var target_pair: int = selected_pair
-
-	if (
-		target_pair < 0
-		or target_pair >= table_cards.size()
-	):
-		target_pair = unbeaten_pair()
-
-	if is_joker(card):
-		if (
-			can_transfer()
-			and bot_hand.size() >= table_cards.size() + 1
-		):
-			show_joker_choices(
-				"transfer",
-				index,
-				target_pair
-			)
-		else:
-			show_joker_choices(
-				"defend",
-				index,
-				target_pair
-			)
-		return
-
-	if can_transfer() and table_has_rank(card_rank(card)):
-		player_transfer(index, card)
-
-	elif target_pair >= 0:
-		player_defend(
-			index,
-			target_pair,
-			card
-		)
 
 
 # ==========================================
