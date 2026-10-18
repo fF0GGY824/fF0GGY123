@@ -2059,15 +2059,8 @@ func draw_cards() -> void:
 		status_text = "У тебя уже 6 карт."
 
 	else:
-		var before: int = player_hand.size()
-
-		draw_to_six(player_hand)
-
-		status_text = (
-			"Добрано карт: %d"
-			% (player_hand.size() - before)
-		)
-
+		player_hand.append(deck.pop_back())
+		status_text = "Добрана 1 карта."
 		pulse(deck_panel)
 
 	update_ui()
