@@ -71,6 +71,7 @@ var field_panel: GameField
 var battle_layout: GridContainer
 var deck_info: HBoxContainer
 var battle_scroll: ScrollContainer
+var hand_actions_layout: GridContainer
 var landscape_mode: bool = false
 var slot_width: float = 78.0
 var slot_height: float = 132.0
@@ -978,14 +979,23 @@ func create_game_screen() -> void:
 	player_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	player_row.add_child(player_label)
 
-	# Рука игрока.
+	# Landscape: hand and controls share one line; portrait stacks them.
+	hand_actions_layout = GridContainer.new()
+	hand_actions_layout.name = "HandActionsLayout"
+	hand_actions_layout.columns = 2
+	hand_actions_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hand_actions_layout.add_theme_constant_override("h_separation", 12)
+	hand_actions_layout.add_theme_constant_override("v_separation", 7)
+	root.add_child(hand_actions_layout)
+
 	var hand_scroll: ScrollContainer = ScrollContainer.new()
+	hand_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	hand_scroll.name = "HandScroll"
 	hand_scroll.custom_minimum_size = Vector2(0, 134)
 	hand_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	hand_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	root.add_child(hand_scroll)
+	hand_actions_layout.add_child(hand_scroll)
 
 	hand_row = HBoxContainer.new()
 
@@ -1011,7 +1021,8 @@ func create_game_screen() -> void:
 		5
 	)
 
-	root.add_child(actions)
+	actions.size_flags_horizontal = Control.SIZE_SHRINK_END
+	hand_actions_layout.add_child(actions)
 
 	actions.add_child(
 		make_button("Добрать", draw_cards)
@@ -1108,6 +1119,8 @@ func adapt_layout() -> void:
 
 	if battle_layout != null:
 		battle_layout.columns = 1 if portrait else 2
+	if hand_actions_layout != null:
+		hand_actions_layout.columns = 1 if portrait else 2
 	if deck_info != null:
 		deck_info.size_flags_horizontal = (
 			Control.SIZE_SHRINK_CENTER if portrait
@@ -1119,6 +1132,12 @@ func adapt_layout() -> void:
 	# Exactly 5 visible places per row. Defense overlaps attack
 	# inside the same slot instead of producing a third/fourth row.
 	card_width = clampf((table_space - 48.0) / 5.0 - 9.0, 42.0, 94.0)
+	# Avoid a tall table pushing the hand below the fold in landscape.
+	if not portrait and viewport_size.y < 760.0:
+		card_width = minf(
+			card_width,
+			clampf((viewport_size.y - 455.0) / 2.8, 42.0, 94.0)
+		)
 	card_height = card_width * 1.40
 	slot_width = card_width + 9.0
 	slot_height = card_height + 26.0
