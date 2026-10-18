@@ -37,6 +37,32 @@ func _run() -> void:
 	verify(game.player_hand.size() == 6 and game.bot_hand.size() == 6, "Both players start with six cards")
 	verify(game.deck.size() == 43, "Deck contains 52 normal cards, two jokers and one mark")
 
+	# Regression: standard Android fonts may not contain suit glyphs.
+	# Card suits must be vector graphics and the trump remains visible.
+	var hearts_card: Variant = game.make_card_view(normal_card(8, "♥"), "hand", 0, -1)
+	root.add_child(hearts_card)
+	var hearts_glyph: Variant = hearts_card.get_node_or_null("SuitGlyph")
+	verify(hearts_glyph != null and hearts_glyph.suit == "♥", "Heart suit renders through a vector symbol")
+	hearts_card.queue_free()
+
+	game.trump_mode = "suit"
+	game.trump_suit = "♠"
+	game.update_ui()
+	verify(game.trump_label.text == "ПИКИ" and game.trump_icon_row.get_child_count() == 1, "Normal trump is clearly labeled and drawn")
+	game.trump_mode = "red"
+	game.update_ui()
+	verify(game.trump_label.text.contains("ЧЕРВЫ") and game.trump_icon_row.get_child_count() == 2, "Dual red trump shows both vector suits")
+	game.trump_mode = "black"
+	game.update_ui()
+	verify(game.trump_label.text.contains("ТРЕФЫ") and game.trump_icon_row.get_child_count() == 2, "Dual black trump shows both vector suits")
+	game.trump_mode = "none"
+	game.update_ui()
+	verify(game.trump_label.text.contains("БЕЗ") and game.trump_icon_row.get_child_count() == 1, "No-trump mode is clearly shown")
+	game.deck.clear()
+	game.update_ui()
+	verify(game.trump_label.visible and game.trump_icon_row.visible, "Trump display stays visible after deck runs out")
+	game.new_game()
+
 	var attack: Dictionary = normal_card(6, "♣")
 	var stronger: Dictionary = normal_card(10, "♣")
 	var cheaper: Dictionary = normal_card(7, "♣")
