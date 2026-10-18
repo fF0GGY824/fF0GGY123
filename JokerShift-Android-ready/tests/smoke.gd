@@ -36,6 +36,14 @@ func _run() -> void:
 	verify(game.game_screen.visible and not game.menu_screen.visible, "Start button shows the game")
 	verify(game.player_hand.size() == 6 and game.bot_hand.size() == 6, "Both players start with six cards")
 	verify(game.deck.size() == 43, "Deck contains 52 normal cards, two jokers and one mark")
+	# Pressing "Draw" must take exactly one card, not refill the entire hand.
+	game.player_hand.resize(3)
+	var previous_deck_count: int = game.deck.size()
+	game.draw_cards()
+	verify(game.player_hand.size() == 4, "Draw button adds exactly one card")
+	verify(game.deck.size() == previous_deck_count - 1, "Draw button removes exactly one card from deck")
+	game.new_game()
+
 
 	# Regression: standard Android fonts may not contain suit glyphs.
 	# Card suits must be vector graphics and the trump remains visible.
