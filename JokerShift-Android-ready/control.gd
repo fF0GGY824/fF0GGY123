@@ -519,6 +519,8 @@ func create_interface() -> void:
 func make_style_avatar_box(side: int) -> PanelContainer:
 	var panel: PanelContainer = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(side, side)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.add_theme_stylebox_override(
 		"panel",
 		make_style(Color("#381957"), GOLD, 14)
@@ -529,6 +531,9 @@ func make_style_avatar_box(side: int) -> PanelContainer:
 func create_avatar_holder(side: int, is_menu: bool) -> Control:
 	var holder: Control = Control.new()
 	holder.custom_minimum_size = Vector2(side, side)
+	holder.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	holder.clip_contents = true
 	var picture: TextureRect = TextureRect.new()
 	picture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -779,11 +784,22 @@ func create_game_screen() -> void:
 
 	add_child(game_screen)
 
-	var margin: MarginContainer = MarginContainer.new()
+	# Keep the hand and action buttons accessible on short or landscape
+	# screens. This prevents the main column from being clipped.
+	var screen_scroll: ScrollContainer = ScrollContainer.new()
+	screen_scroll.name = "GameScroll"
+	screen_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	screen_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	screen_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	screen_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	screen_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	game_screen.add_child(screen_scroll)
 
-	margin.set_anchors_and_offsets_preset(
-		Control.PRESET_FULL_RECT
-	)
+	var margin: MarginContainer = MarginContainer.new()
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	margin.custom_minimum_size = Vector2(0, 585)
+	screen_scroll.add_child(margin)
 
 	margin.add_theme_constant_override("margin_left", 6)
 	margin.add_theme_constant_override("margin_right", 6)
@@ -947,18 +963,36 @@ func create_game_screen() -> void:
 
 	# Nickname and avatar beside the player's hand.
 	var player_row: HBoxContainer = HBoxContainer.new()
+	player_row.name = "PlayerInfoRow"
 	player_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	player_row.custom_minimum_size = Vector2(0, 52)
+	player_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	player_row.add_theme_constant_override("separation", 10)
 	root.add_child(player_row)
+
 	var player_avatar_box: PanelContainer = make_style_avatar_box(46)
+	player_avatar_box.name = "PlayerAvatar"
 	player_row.add_child(player_avatar_box)
 	player_avatar_box.add_child(create_avatar_holder(42, false))
+
 	player_label = make_label("", 17, GOLD)
+	player_label.name = "PlayerNickname"
+	# Wrapping this label made it one character wide; its enormous
+	# height pushed the hand and buttons below the window.
+	player_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	player_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	player_label.custom_minimum_size = Vector2(154, 40)
+	player_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	player_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	player_row.add_child(player_label)
 
 	# Рука игрока.
 	var hand_scroll: ScrollContainer = ScrollContainer.new()
 
-	hand_scroll.custom_minimum_size = Vector2(0, 120)
+	hand_scroll.name = "HandScroll"
+	hand_scroll.custom_minimum_size = Vector2(0, 134)
+	hand_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	hand_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(hand_scroll)
 
 	hand_row = HBoxContainer.new()
@@ -972,7 +1006,7 @@ func create_game_screen() -> void:
 
 	# Кнопки.
 	var actions: GridContainer = GridContainer.new()
-
+	actions.name = "ActionButtons"
 	actions.columns = 2
 
 	actions.add_theme_constant_override(
