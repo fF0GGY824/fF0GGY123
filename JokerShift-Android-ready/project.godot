@@ -34,6 +34,6 @@ window/stretch/aspect="expand"
 
 textures/vram_compression/import_etc2_astc=true
 
-rendering_device/driver.windows="d3d12"
+; Compatibility renderer uses the standard cross-platform backend.
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
