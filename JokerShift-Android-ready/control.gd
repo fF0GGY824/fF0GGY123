@@ -41,6 +41,8 @@ var joker_options: VBoxContainer
 var bot_label: Label
 var player_label: Label
 var deck_label: Label
+var trump_label: Label
+var trump_icon_row: HBoxContainer
 var status_label: Label
 
 var table_grid: GridContainer
@@ -60,6 +62,77 @@ var pending_pair_index: int = -1
 # КАРТА
 # ==========================================
 
+# Symbols are painted with vector shapes instead of relying on Android font glyphs.
+class SuitIcon extends Control:
+	var suit: String = ""
+	var ink: Color = Color("#251530")
+	var card_icon: bool = false
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		queue_redraw()
+
+	func paint_poly(points: PackedVector2Array) -> void:
+		draw_colored_polygon(points, ink)
+
+	func _draw() -> void:
+		if suit.is_empty():
+			return
+
+		var center: Vector2 = Vector2(size.x * 0.5, size.y * (0.60 if card_icon else 0.5))
+		var r: float = minf(size.x * 0.30, size.y * (0.23 if card_icon else 0.36))
+		if r < 2.0:
+			return
+
+		match suit:
+			"♥":
+				draw_circle(center + Vector2(-0.47 * r, -0.35 * r), 0.65 * r, ink)
+				draw_circle(center + Vector2(0.47 * r, -0.35 * r), 0.65 * r, ink)
+				paint_poly(PackedVector2Array([
+					center + Vector2(-1.10 * r, -0.25 * r),
+					center + Vector2(1.10 * r, -0.25 * r),
+					center + Vector2(0.0, 1.28 * r)
+				]))
+			"♦":
+				paint_poly(PackedVector2Array([
+					center + Vector2(0.0, -1.28 * r),
+					center + Vector2(0.95 * r, 0.0),
+					center + Vector2(0.0, 1.28 * r),
+					center + Vector2(-0.95 * r, 0.0)
+				]))
+			"♠":
+				draw_circle(center + Vector2(-0.49 * r, 0.12 * r), 0.62 * r, ink)
+				draw_circle(center + Vector2(0.49 * r, 0.12 * r), 0.62 * r, ink)
+				paint_poly(PackedVector2Array([
+					center + Vector2(0.0, -1.33 * r),
+					center + Vector2(1.04 * r, 0.33 * r),
+					center + Vector2(-1.04 * r, 0.33 * r)
+				]))
+				paint_poly(PackedVector2Array([
+					center + Vector2(-0.20 * r, 0.30 * r),
+					center + Vector2(0.20 * r, 0.30 * r),
+					center + Vector2(0.47 * r, 1.12 * r),
+					center + Vector2(-0.47 * r, 1.12 * r)
+				]))
+			"♣":
+				draw_circle(center + Vector2(0.0, -0.66 * r), 0.63 * r, ink)
+				draw_circle(center + Vector2(-0.59 * r, 0.16 * r), 0.63 * r, ink)
+				draw_circle(center + Vector2(0.59 * r, 0.16 * r), 0.63 * r, ink)
+				paint_poly(PackedVector2Array([
+					center + Vector2(-0.20 * r, 0.0),
+					center + Vector2(0.20 * r, 0.0),
+					center + Vector2(0.47 * r, 1.10 * r),
+					center + Vector2(-0.47 * r, 1.10 * r)
+				]))
+			"joker", "mark":
+				var points: PackedVector2Array = PackedVector2Array()
+				for i in range(10):
+					var a: float = -PI * 0.5 + float(i) * PI / 5.0
+					var length: float = r * (1.16 if i % 2 == 0 else 0.43)
+					points.append(center + Vector2(cos(a), sin(a)) * length)
+				paint_poly(points)
+
+
 class GameCard extends Button:
 	var game
 	var card: Dictionary = {}
@@ -74,6 +147,20 @@ class GameCard extends Button:
 
 		mouse_entered.connect(_hover.bind(true))
 		mouse_exited.connect(_hover.bind(false))
+
+		var icon: SuitIcon = SuitIcon.new()
+		icon.name = "SuitGlyph"
+		icon.card_icon = true
+		icon.suit = str(game.card_suit(card))
+		icon.ink = Color("#D82E57") if icon.suit == "♥" or icon.suit == "♦" else Color("#251530")
+		if game.is_mark(card):
+			icon.suit = "mark"
+			icon.ink = Color("#8732C8")
+		elif game.is_joker(card):
+			icon.suit = "joker"
+			icon.ink = Color("#D82E57") if str(card.get("joker_color", "")) == "red" else Color("#251530")
+		add_child(icon)
+		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	func _hover(active: bool) -> void:
 		if not is_inside_tree():
@@ -136,25 +223,7 @@ class GameCard extends Button:
 			ink
 		)
 
-		var suit_width: float = font.get_string_size(
-			suit,
-			HORIZONTAL_ALIGNMENT_LEFT,
-			-1,
-			big_size
-		).x
-
-		draw_string(
-			font,
-			Vector2(
-				(size.x - suit_width) / 2.0,
-				size.y * 0.69
-			),
-			suit,
-			HORIZONTAL_ALIGNMENT_LEFT,
-			-1,
-			big_size,
-			ink
-		)
+		# The suit itself is drawn by SuitIcon without a font dependency.
 
 		if game.is_joker(card):
 			var subtitle: String = "ДЖОКЕР"
@@ -677,6 +746,17 @@ func create_game_screen() -> void:
 	deck_art.add_child(make_label("JOKER", 11))
 	deck_art.add_child(make_label("SHIFT", 11))
 
+	# A permanent trump display, separate from the deck card.
+	# The graphic never relies on unavailable playing-card font glyphs.
+	deck_column.add_child(make_label("КОЗЫРЬ", 13, GOLD))
+	trump_icon_row = HBoxContainer.new()
+	trump_icon_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	trump_icon_row.custom_minimum_size = Vector2(82, 48)
+	deck_column.add_child(trump_icon_row)
+
+	trump_label = make_label("", 12, GOLD)
+	deck_column.add_child(trump_label)
+
 	deck_label = make_label("", 13)
 	deck_column.add_child(deck_label)
 
@@ -893,6 +973,54 @@ func setup_trump(card: Dictionary) -> void:
 	else:
 		trump_mode = "suit"
 		trump_suit = str(card["suit"])
+
+
+func trump_display_name() -> String:
+	match trump_mode:
+		"none":
+			return "БЕЗ\nКОЗЫРЯ"
+		"red":
+			return "ЧЕРВЫ\nБУБНЫ"
+		"black":
+			return "ПИКИ\nТРЕФЫ"
+		_:
+			match trump_suit:
+				"♥":
+					return "ЧЕРВЫ"
+				"♦":
+					return "БУБНЫ"
+				"♠":
+					return "ПИКИ"
+				"♣":
+					return "ТРЕФЫ"
+				_:
+					return "НЕТ"
+
+
+func update_trump_symbol() -> void:
+	if trump_icon_row == null:
+		return
+	clear_children(trump_icon_row)
+	var suits_to_draw: Array[String] = []
+	match trump_mode:
+		"red":
+			suits_to_draw = ["♥", "♦"]
+		"black":
+			suits_to_draw = ["♠", "♣"]
+		"none":
+			suits_to_draw = ["mark"]
+		_:
+			suits_to_draw = [trump_suit]
+
+	for suit in suits_to_draw:
+		var icon: SuitIcon = SuitIcon.new()
+		icon.name = "TrumpSuit"
+		icon.suit = suit
+		icon.ink = Color("#D82E57") if suit == "♥" or suit == "♦" else Color("#F5E8FF")
+		if suit == "mark":
+			icon.ink = GOLD
+		icon.custom_minimum_size = Vector2(36, 44)
+		trump_icon_row.add_child(icon)
 
 
 func draw_to_six(hand: Array) -> void:
@@ -2230,13 +2358,9 @@ func update_ui() -> void:
 		]
 	)
 
-	deck_label.text = (
-		"%d карт\nКозырь:\n%s"
-		% [
-			deck.size(),
-			trump_suit
-		]
-	)
+	deck_label.text = "%d карт" % deck.size()
+	trump_label.text = trump_display_name()
+	update_trump_symbol()
 
 	deck_panel.visible = not deck.is_empty()
 	status_label.text = status_text
