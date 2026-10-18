@@ -81,8 +81,19 @@ jobs:
       - name: Export Android APK
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p build
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$HOME/.android/debug.keystore"
+          export GODOT_ANDROID_KEYSTORE_DEBUG_USER="androiddebugkey"
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD="android"
           godot --verbose --headless --path JokerShift-Android-ready --export-debug Android "$GITHUB_WORKSPACE/build/JokerShift.apk"
+      - name: Verify APK is signed and installable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s build/JokerShift.apk
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs build/JokerShift.apk | tee /tmp/jokershift-apk-signature.txt
+          grep -Eq "Verified using v[234] scheme \(APK Signature Scheme v[234]\): true" /tmp/jokershift-apk-signature.txt
       - uses: actions/upload-artifact@v4
         with:
           name: JokerShift-Android-APK
