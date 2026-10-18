@@ -34,7 +34,7 @@ jobs:
           echo "SDK=$SDK JAVA=$JAVA"
           ls "$SDK" || true
           ls "$JAVA" || true
-          apt-get update && apt-get install -y wget unzip
+          apt-get update && apt-get install -y wget unzip fontconfig fonts-dejavu-core
           mkdir -p "$SDK/cmdline-tools"
           wget -q -O /tmp/android-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q /tmp/android-tools.zip -d /tmp/android-cli
@@ -44,6 +44,9 @@ jobs:
           mkdir -p "$HOME/.android"
           keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           mkdir -p "$HOME/.config/godot"
+          export JAVA_HOME="$JAVA"
+          echo "JAVA_HOME=$JAVA" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           cat > "$HOME/.config/godot/editor_settings-4.5.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
 
@@ -65,11 +68,12 @@ jobs:
           java -version
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android
           cat JokerShift-Android-ready/export_presets.cfg
+          find "$HOME/.config/godot" -maxdepth 1 -type f -print
       - name: Export Android APK
         shell: bash
         run: |
           mkdir -p build
-          godot --verbose --headless --path JokerShift-Android-ready --export-debug Android "$GITHUB_WORKSPACE/build/JokerShift.apk"
+          godot --verbose --headless --editor --path JokerShift-Android-ready --export-debug Android "$GITHUB_WORKSPACE/build/JokerShift.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: JokerShift-Android-APK
