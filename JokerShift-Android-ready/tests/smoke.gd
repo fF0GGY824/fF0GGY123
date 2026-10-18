@@ -58,6 +58,34 @@ func _run() -> void:
 	get_root().size = Vector2i(720, 1280)
 	await process_frame
 	game.adapt_layout()
+	# Responsive battle layout: ten slots in two rows of five, both orientations.
+	var battle_layout: GridContainer = game.game_screen.find_child("BattleLayout", true, false)
+	var table_grid: GridContainer = game.game_screen.find_child("TableSlots", true, false)
+	var battle_scroll: ScrollContainer = game.game_screen.find_child("TableScroll", true, false)
+	var deck_info: HBoxContainer = game.game_screen.find_child("DeckInfo", true, false)
+	verify(battle_layout != null and table_grid != null and deck_info != null, "Responsive field, deck and slot grid exist")
+	if battle_layout != null and table_grid != null and battle_scroll != null:
+		for test_size in [Vector2i(1152, 648), Vector2i(360, 648), Vector2i(720, 1280)]:
+			get_root().size = test_size
+			await process_frame
+			game.adapt_layout()
+			await process_frame
+			verify(table_grid.columns == 5 and table_grid.get_child_count() == 10, "Five columns with ten places at " + str(test_size))
+			var expected_columns: int = 1 if test_size.y >= test_size.x else 2
+			verify(battle_layout.columns == expected_columns, "Portrait/landscape deck reflow at " + str(test_size))
+			verify(table_grid.size.x <= battle_scroll.size.x + 3.0, "Ten places fit available table width at " + str(test_size))
+		game.table_cards.clear()
+		for i in range(10):
+			game.table_cards.append({"attack": normal_card(i + 2, "♥"), "defense": {}})
+		game.update_ui()
+		verify(table_grid.get_child_count() == 10, "Ten attack cards occupy exactly two rows")
+		game.table_cards[0]["defense"] = normal_card(14, "♥")
+		game.update_ui()
+		verify(table_grid.get_child_count() == 10 and table_grid.get_child(0).get_child_count() == 2, "Covering defense overlaps its attack in the same slot")
+		game.new_game()
+	get_root().size = Vector2i(720, 1280)
+	await process_frame
+	game.adapt_layout()
 
 	verify(game.player_hand.size() == 6, "Player starts with six cards")
 	verify(game.bot_hand.size() + game.table_cards.size() == 6, "Bot starts with six cards, possibly leading first")
