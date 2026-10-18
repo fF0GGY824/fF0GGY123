@@ -34,6 +34,15 @@ jobs:
           echo "SDK=$SDK JAVA=$JAVA"
           ls "$SDK" || true
           ls "$JAVA" || true
+          apt-get update && apt-get install -y wget unzip
+          mkdir -p "$SDK/cmdline-tools"
+          wget -q -O /tmp/android-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/android-tools.zip -d /tmp/android-cli
+          mv /tmp/android-cli/cmdline-tools "$SDK/cmdline-tools/latest"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           mkdir -p "$HOME/.config/godot"
           cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
@@ -41,6 +50,9 @@ jobs:
           [resource]
           export/android/android_sdk_path = "$SDK"
           export/android/java_sdk_path = "$JAVA"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
           EOF
       - name: Import Godot project
         run: godot --headless --path JokerShift-Android-ready --editor --import --quit
