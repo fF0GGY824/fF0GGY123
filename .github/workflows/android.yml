@@ -44,7 +44,7 @@ jobs:
           mkdir -p "$HOME/.android"
           keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           mkdir -p "$HOME/.config/godot"
-          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          cat > "$HOME/.config/godot/editor_settings-4.5.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
 
           [resource]
@@ -60,7 +60,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p build
-          godot --headless --path JokerShift-Android-ready --export-debug Android "$GITHUB_WORKSPACE/build/JokerShift.apk"
+          godot --verbose --headless --path JokerShift-Android-ready --export-debug Android "$GITHUB_WORKSPACE/build/JokerShift.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: JokerShift-Android-APK
