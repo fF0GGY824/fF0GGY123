@@ -140,7 +140,7 @@ func _refresh() -> void:
 		b.add_theme_font_size_override("font_size", 20)
 		b.pressed.connect(_play.bind(i))
 		cards.add_child(b)
-	action_button.text = "Забрать" if not player_attacks else "Бито / завершить"
+	action_button.text = ("Бито" if defenses.size() == attacks.size() and not attacks.is_empty() else "Забрать") if not player_attacks else "Бито / завершить"
 	action_button.disabled = game_over
 	if game_over:
 		action_button.text = "Игра окончена"
@@ -211,14 +211,21 @@ func _action() -> void:
 		player_attacks = false
 		_bot_attack()
 	else:
-		for c in attacks + defenses:
-			hand.append(c)
-		attacks.clear()
-		defenses.clear()
-		_draw_cards()
-		player_attacks = false
-		info.text = "Ты забрал карты"
-		_bot_attack()
+		if not attacks.is_empty() and defenses.size() == attacks.size():
+			attacks.clear()
+			defenses.clear()
+			_draw_cards()
+			player_attacks = true
+			info.text = "Бито! Теперь ты атакуешь"
+		else:
+			for c in attacks + defenses:
+				hand.append(c)
+			attacks.clear()
+			defenses.clear()
+			_draw_cards()
+			player_attacks = false
+			info.text = "Ты забрал карты"
+			_bot_attack()
 	_check_end()
 	_refresh()
 
