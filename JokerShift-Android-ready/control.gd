@@ -1826,11 +1826,8 @@ func show_joker_choices(
 		count += 1
 
 	if count == 0 and action == "transfer":
-		show_joker_choices(
-			"defend",
-			index,
-			pair_index
-		)
+		status_text = "Джокеру нечего копировать для перевода."
+		update_ui()
 		return
 
 	if count == 0:
@@ -1870,13 +1867,15 @@ func choose_joker(target: Dictionary) -> void:
 		"throw":
 			player_throw(
 				pending_joker_index,
-				copied
+				copied,
+				pending_slot_id
 			)
 
 		"transfer":
 			player_transfer(
 				pending_joker_index,
-				copied
+				copied,
+				pending_slot_id
 			)
 
 		"defend":
@@ -1898,11 +1897,13 @@ func choose_joker(target: Dictionary) -> void:
 # АТАКА ИГРОКА
 # ==========================================
 
-func player_attack(index: int) -> void:
+func player_attack(index: int, slot_id: int = 0) -> void:
 	if attacker != 0:
 		return
 
 	if not table_cards.is_empty():
+		return
+	if slot_id < 0 or slot_id >= 10 or pair_at_slot(slot_id) != -1:
 		return
 
 	var card: Dictionary = player_hand[index]
@@ -1918,7 +1919,8 @@ func player_attack(index: int) -> void:
 
 	table_cards.append({
 		"attack": card,
-		"defense": {}
+		"defense": {},
+		"slot_id": slot_id
 	})
 
 	selected_index = -1
@@ -2027,7 +2029,8 @@ func player_replace(
 
 func player_throw(
 	index: int,
-	card: Dictionary
+	card: Dictionary,
+	slot_id: int = -1
 ) -> void:
 	if attacker != 0:
 		return
@@ -2045,6 +2048,13 @@ func player_throw(
 		update_ui()
 		return
 
+	if slot_id == -1:
+		slot_id = free_table_slot()
+	if slot_id < 0 or slot_id >= 10 or pair_at_slot(slot_id) != -1:
+		status_text = "Выбери свободную ячейку для подкидывания."
+		update_ui()
+		return
+
 	if (
 		card_rank(card) == 100
 		or not table_has_rank(card_rank(card))
@@ -2059,7 +2069,8 @@ func player_throw(
 
 	table_cards.append({
 		"attack": card,
-		"defense": {}
+		"defense": {},
+		"slot_id": slot_id
 	})
 
 	selected_index = -1
@@ -2077,7 +2088,8 @@ func player_throw(
 
 func player_transfer(
 	index: int,
-	card: Dictionary
+	card: Dictionary,
+	slot_id: int = -1
 ) -> void:
 	if attacker != 1:
 		return
@@ -2094,11 +2106,19 @@ func player_transfer(
 		update_ui()
 		return
 
+	if slot_id == -1:
+		slot_id = free_table_slot()
+	if slot_id < 0 or slot_id >= 10 or pair_at_slot(slot_id) != -1:
+		status_text = "Для перевода выбери свободную ячейку."
+		update_ui()
+		return
+
 	player_hand.remove_at(index)
 
 	table_cards.append({
 		"attack": card,
-		"defense": {}
+		"defense": {},
+		"slot_id": slot_id
 	})
 
 	attacker = 0
@@ -2187,7 +2207,8 @@ func bot_try_transfer() -> bool:
 
 	table_cards.append({
 		"attack": best_card,
-		"defense": {}
+		"defense": {},
+		"slot_id": free_table_slot()
 	})
 
 	attacker = 1
@@ -2291,6 +2312,8 @@ func bot_defend() -> void:
 func bot_throw() -> void:
 	if attacker != 1:
 		return
+	if free_table_slot() == -1:
+		return
 
 	if not all_defended():
 		return
@@ -2339,7 +2362,8 @@ func bot_throw() -> void:
 
 	table_cards.append({
 		"attack": best_card,
-		"defense": {}
+		"defense": {},
+		"slot_id": free_table_slot()
 	})
 
 	selected_pair = table_cards.size() - 1
@@ -2400,7 +2424,10 @@ func bot_attack() -> void:
 
 	table_cards.append({
 		"attack": card,
-		"defense": {}
+		"defense": {},
+		"slot_id": free_table_slot(),
+		"slot_id": free_table_slot(),
+		"slot_id": free_table_slot()
 	})
 
 	attacker = 1
