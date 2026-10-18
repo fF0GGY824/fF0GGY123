@@ -806,8 +806,6 @@ func create_game_screen() -> void:
 	margin.add_theme_constant_override("margin_top", 6)
 	margin.add_theme_constant_override("margin_bottom", 6)
 
-	game_screen.add_child(margin)
-
 	var root: VBoxContainer = VBoxContainer.new()
 
 	root.add_theme_constant_override(
