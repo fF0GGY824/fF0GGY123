@@ -189,6 +189,30 @@ class GameCard extends Button:
 		add_child(icon)
 		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
+		# A second, smaller vector suit in the upper-right corner
+		# makes suits identifiable even on compact portrait cards.
+		var corner: SuitIcon = SuitIcon.new()
+		corner.name = "SuitCorner"
+		corner.suit = str(game.card_suit(card))
+		if corner.suit.is_empty():
+			corner.suit = icon.suit
+		corner.ink = (
+			Color("#D82E57")
+			if corner.suit == "♥" or corner.suit == "♦"
+			else Color("#251530")
+		)
+		if corner.suit == "joker" or corner.suit == "mark":
+			corner.ink = icon.ink
+		corner.anchor_left = 1.0
+		corner.anchor_right = 1.0
+		corner.anchor_top = 0.0
+		corner.anchor_bottom = 0.0
+		corner.offset_left = -23.0
+		corner.offset_right = -3.0
+		corner.offset_top = 3.0
+		corner.offset_bottom = 24.0
+		add_child(corner)
+
 	func _hover(active: bool) -> void:
 		if not is_inside_tree():
 			return
@@ -250,7 +274,26 @@ class GameCard extends Button:
 			ink
 		)
 
-		# The suit itself is drawn by SuitIcon without a font dependency.
+		# A readable suit name under the vector icon. No playing-card
+		# characters are needed from the system font.
+		if not game.is_special(card):
+			var caption: String = game.suit_short_name(suit)
+			var caption_size: int = maxi(9, int(11.0 * factor))
+			var caption_width: float = font.get_string_size(
+				caption,
+				HORIZONTAL_ALIGNMENT_LEFT,
+				-1,
+				caption_size
+			).x
+			draw_string(
+				font,
+				Vector2(maxf(2.0, (size.x - caption_width) * 0.5), size.y - 7.0),
+				caption,
+				HORIZONTAL_ALIGNMENT_LEFT,
+				-1,
+				caption_size,
+				ink
+			)
 
 		if game.is_joker(card):
 			var subtitle: String = "ДЖОКЕР"
@@ -1390,6 +1433,20 @@ func rank_name(rank: int) -> String:
 		return "?"
 
 	return str(RANKS[rank - 2])
+
+
+func suit_short_name(suit: String) -> String:
+	match suit:
+		"♥":
+			return "ЧЕРВ"
+		"♦":
+			return "БУБ"
+		"♠":
+			return "ПИК"
+		"♣":
+			return "ТРЕФ"
+		_:
+			return ""
 
 
 func card_name(card: Dictionary) -> String:
