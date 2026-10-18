@@ -155,6 +155,10 @@ func _run() -> void:
 	root.add_child(hearts_card)
 	var hearts_glyph: Variant = hearts_card.get_node_or_null("SuitGlyph")
 	verify(hearts_glyph != null and hearts_glyph.suit == "♥", "Heart suit renders through a vector symbol")
+	var corner_glyph: Variant = hearts_card.get_node_or_null("SuitCorner")
+	verify(corner_glyph != null and corner_glyph.suit == "♥", "Suit is also visible in the corner")
+	for test_suit in ["♠", "♥", "♦", "♣"]:
+		verify(game.suit_short_name(test_suit) != "", "Readable suit label exists for " + test_suit)
 	hearts_card.queue_free()
 
 	game.trump_mode = "suit"
@@ -173,6 +177,52 @@ func _run() -> void:
 	game.deck.clear()
 	game.update_ui()
 	verify(game.trump_label.visible and game.trump_icon_row.visible, "Trump display stays visible after deck runs out")
+	game.new_game()
+
+	# Each of the ten squares is an actual interactive drop target.
+	game.new_game()
+	game.trump_mode = "suit"
+	game.trump_suit = "♠"
+	game.bot_difficulty = 1
+	game.attacker = 0
+	game.bot_takes = false
+	game.table_cards.clear()
+	game.player_hand = [normal_card(12, "♥"), normal_card(11, "♥")]
+	game.bot_hand = [normal_card(2, "♣"), normal_card(3, "♣"), normal_card(4, "♣"), normal_card(5, "♣"), normal_card(6, "♣"), normal_card(7, "♣")]
+	game.deck.clear()
+	game.update_ui()
+	var square: Variant = table_grid.get_child(7)
+	verify(square.name == "Slot_7", "All ten squares have stable identifiers")
+	verify(square._can_drop_data(Vector2.ZERO, {"type": "hand_card", "index": 0}), "Can drag attack into chosen empty square")
+	game.place_in_slot(0, 7)
+	verify(game.table_cards.size() == 1 and game.pair_at_slot(7) == 0, "Player attack stays in chosen square 8")
+	var remaining: int = game.player_hand.size()
+	game.place_in_slot(0, 7)
+	verify(game.player_hand.size() == remaining and game.table_cards.size() == 1, "Illegal drop does not consume a card")
+
+	game.attacker = 1
+	game.bot_takes = false
+	game.table_cards = [{"attack": normal_card(6, "♣"), "defense": {}, "slot_id": 4}]
+	game.player_hand = [normal_card(8, "♣"), normal_card(6, "♥")]
+	game.bot_hand = []
+	game.update_ui()
+	verify(game.can_drop_on_slot(0, 4), "Valid defender can be placed on occupied square")
+	verify(not game.can_drop_on_slot(0, 5), "Different rank cannot be translated into empty square")
+	var defending_square: Variant = table_grid.get_child(4)
+	verify(defending_square._can_drop_data(Vector2.ZERO, {"type": "hand_card", "index": 0}), "Attacked square accepts dragged covering card")
+	game.place_in_slot(0, 4)
+	verify(game.card_rank(game.table_cards[0]["defense"]) == 8 and game.pair_at_slot(4) == 0, "Defense covers attack in selected square")
+
+	game.attacker = 1
+	game.bot_takes = false
+	game.table_cards = [{"attack": normal_card(6, "♣"), "defense": {}, "slot_id": 2}]
+	game.player_hand = [normal_card(6, "♦")]
+	game.bot_hand = [normal_card(2, "♥"), normal_card(3, "♥"), normal_card(4, "♥"), normal_card(5, "♥")]
+	game.deck.clear()
+	game.update_ui()
+	verify(game.can_drop_on_slot(0, 9), "Matching rank can be translated into any empty square")
+	game.place_in_slot(0, 9)
+	verify(game.attacker == 0 and game.pair_at_slot(9) == 1, "Transfer changes defender and stays in chosen empty square")
 	game.new_game()
 
 	var attack: Dictionary = normal_card(6, "♣")
