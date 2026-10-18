@@ -56,6 +56,15 @@ jobs:
           EOF
       - name: Import Godot project
         run: godot --headless --path JokerShift-Android-ready --editor --import --quit
+      - name: Diagnose export environment
+        shell: bash
+        run: |
+          cat "$HOME/.config/godot/editor_settings-4.5.tres"
+          ls -lah "$HOME/.local/share/godot/export_templates/4.5.2.stable/"
+          ls -lah "$ANDROID_HOME/build-tools" "$ANDROID_HOME/platforms"
+          java -version
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android
+          cat JokerShift-Android-ready/export_presets.cfg
       - name: Export Android APK
         shell: bash
         run: |
