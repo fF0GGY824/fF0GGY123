@@ -60,6 +60,7 @@ func _run() -> void:
 	game.adapt_layout()
 	# Responsive battle layout: ten slots in two rows of five, both orientations.
 	var battle_layout: GridContainer = game.game_screen.find_child("BattleLayout", true, false)
+	var hand_actions_layout: GridContainer = game.game_screen.find_child("HandActionsLayout", true, false)
 	var table_grid: GridContainer = game.game_screen.find_child("TableSlots", true, false)
 	var battle_scroll: ScrollContainer = game.game_screen.find_child("TableScroll", true, false)
 	var deck_info: HBoxContainer = game.game_screen.find_child("DeckInfo", true, false)
@@ -73,6 +74,7 @@ func _run() -> void:
 			verify(table_grid.columns == 5 and table_grid.get_child_count() == 10, "Five columns with ten places at " + str(test_size))
 			var expected_columns: int = 1 if test_size.y >= test_size.x else 2
 			verify(battle_layout.columns == expected_columns, "Portrait/landscape deck reflow at " + str(test_size))
+			verify(hand_actions_layout != null and hand_actions_layout.columns == expected_columns, "Hand and buttons reflow with orientation at " + str(test_size))
 			verify(table_grid.size.x <= battle_scroll.size.x + 3.0, "Ten places fit available table width at " + str(test_size))
 		game.table_cards.clear()
 		for i in range(10):
