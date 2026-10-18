@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -105,3 +107,16 @@ jobs:
           name: JokerShift-Android-APK
           path: build/JokerShift.apk
           if-no-files-found: error
+      - name: Publish direct APK download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: JokerShift Android — полная версия
+          body: |
+            Полная версия JokerShift с джокерами, меткой, переводом и особыми козырями.
+            APK подписан для установки на Android. Сборка проходит проверку подписи и игровые smoke-тесты.
+            Чтобы скачать, нажмите JokerShift.apk в разделе Assets.
+          files: build/JokerShift.apk
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          make_latest: true
