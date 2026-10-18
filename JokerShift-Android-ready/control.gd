@@ -36,6 +36,17 @@ var menu_screen: Control
 var game_screen: Control
 var nick_input: LineEdit
 var difficulty_select: OptionButton
+var avatar_dialog: FileDialog
+var avatar_preview: TextureRect
+var avatar_game: TextureRect
+var avatar_placeholder_menu: Label
+var avatar_placeholder_game: Label
+var avatar_texture: Texture2D
+
+const AVATAR_SAVE_PATH = "user://avatar.png"
+const PROFILE_SAVE_PATH = "user://profile.cfg"
+const MAX_AVATAR_FILE_BYTES: int = 8 * 1024 * 1024
+const MAX_AVATAR_SIDE: int = 384
 
 var rules_dialog: AcceptDialog
 var result_dialog: AcceptDialog
@@ -331,6 +342,8 @@ class GameField extends PanelContainer:
 
 func _ready() -> void:
 	randomize()
+	load_profile()
+	load_saved_avatar()
 
 	set_anchors_and_offsets_preset(
 		Control.PRESET_FULL_RECT
@@ -497,6 +510,134 @@ func create_interface() -> void:
 # ГЛАВНОЕ МЕНЮ
 # ==========================================
 
+# Profile and avatar stay local on the phone/computer.
+# A native file picker is available on Android 10+ and desktop OSes.
+func make_style_avatar_box(side: int) -> PanelContainer:
+	var panel: PanelContainer = PanelContainer.new()
+	panel.custom_minimum_size = Vector2(side, side)
+	panel.add_theme_stylebox_override(
+		"panel",
+		make_style(Color("#381957"), GOLD, 14)
+	)
+	return panel
+
+
+func create_avatar_holder(side: int, is_menu: bool) -> Control:
+	var holder: Control = Control.new()
+	holder.custom_minimum_size = Vector2(side, side)
+	var picture: TextureRect = TextureRect.new()
+	picture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(picture)
+	picture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var placeholder: Label = make_label("JS", 21, GOLD)
+	placeholder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	placeholder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(placeholder)
+	placeholder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	if is_menu:
+		avatar_preview = picture
+		avatar_placeholder_menu = placeholder
+	else:
+		avatar_game = picture
+		avatar_placeholder_game = placeholder
+	refresh_avatar_views()
+	return holder
+
+
+func refresh_avatar_views() -> void:
+	if avatar_preview != null:
+		avatar_preview.texture = avatar_texture
+	if avatar_game != null:
+		avatar_game.texture = avatar_texture
+	if avatar_placeholder_menu != null:
+		avatar_placeholder_menu.visible = avatar_texture == null
+	if avatar_placeholder_game != null:
+		avatar_placeholder_game.visible = avatar_texture == null
+
+
+func load_profile() -> void:
+	var config: ConfigFile = ConfigFile.new()
+	if config.load(PROFILE_SAVE_PATH) != OK:
+		return
+	player_nick = str(config.get_value("player", "nickname", "Игрок"))
+	bot_difficulty = clampi(int(config.get_value("game", "difficulty", 1)), 0, 2)
+
+
+func save_profile() -> void:
+	var config: ConfigFile = ConfigFile.new()
+	config.set_value("player", "nickname", player_nick)
+	config.set_value("game", "difficulty", bot_difficulty)
+	config.save(PROFILE_SAVE_PATH)
+
+
+func on_difficulty_changed(index: int) -> void:
+	bot_difficulty = clampi(index, 0, 2)
+	save_profile()
+
+
+func load_saved_avatar() -> void:
+	if not FileAccess.file_exists(AVATAR_SAVE_PATH):
+		return
+	var img: Image = Image.new()
+	if img.load(AVATAR_SAVE_PATH) == OK and not img.is_empty():
+		avatar_texture = ImageTexture.create_from_image(img)
+
+
+func open_avatar_picker() -> void:
+	if avatar_dialog != null:
+		avatar_dialog.popup_centered_ratio(0.85)
+
+
+func on_avatar_file_selected(path: String) -> void:
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		OS.alert("Не удалось открыть фото. Выбери JPG или PNG.", "JokerShift")
+		return
+	if file.get_length() > MAX_AVATAR_FILE_BYTES:
+		OS.alert("Фото слишком большое (максимум 8 МБ).", "JokerShift")
+		return
+	var data: PackedByteArray = file.get_buffer(file.get_length())
+	file.close()
+	var img: Image = Image.new()
+	var ext: String = path.get_extension().to_lower()
+	var err: Error = ERR_FILE_UNRECOGNIZED
+	match ext:
+		"png":
+			err = img.load_png_from_buffer(data)
+		"jpg", "jpeg":
+			err = img.load_jpg_from_buffer(data)
+		"webp":
+			err = img.load_webp_from_buffer(data)
+	if err != OK or img.is_empty():
+		OS.alert("Не удалось прочитать изображение. Подходит JPG, PNG или WebP.", "JokerShift")
+		return
+	var longest: int = maxi(img.get_width(), img.get_height())
+	if longest > MAX_AVATAR_SIDE:
+		var scale_factor: float = float(MAX_AVATAR_SIDE) / float(longest)
+		img.resize(
+			maxi(1, int(img.get_width() * scale_factor)),
+			maxi(1, int(img.get_height() * scale_factor)),
+			Image.INTERPOLATE_LANCZOS
+		)
+	if img.save_png(AVATAR_SAVE_PATH) != OK:
+		OS.alert("Не удалось сохранить аватарку.", "JokerShift")
+		return
+	avatar_texture = ImageTexture.create_from_image(img)
+	refresh_avatar_views()
+
+
+func clear_avatar() -> void:
+	avatar_texture = null
+	if FileAccess.file_exists(AVATAR_SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(AVATAR_SAVE_PATH))
+	refresh_avatar_views()
+
+
 func create_menu() -> void:
 	menu_screen = Control.new()
 
@@ -516,7 +657,7 @@ func create_menu() -> void:
 
 	var menu_panel: PanelContainer = PanelContainer.new()
 
-	menu_panel.custom_minimum_size = Vector2(285, 345)
+	menu_panel.custom_minimum_size = Vector2(310, 485)
 
 	menu_panel.add_theme_stylebox_override(
 		"panel",
@@ -550,9 +691,27 @@ func create_menu() -> void:
 		make_label("Карточная игра", 15)
 	)
 
+	# Personal avatar: an image chosen from the device, not an online account.
+	var avatar_row: HBoxContainer = HBoxContainer.new()
+	avatar_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_child(avatar_row)
+	var avatar_box: PanelContainer = make_style_avatar_box(68)
+	avatar_row.add_child(avatar_box)
+	var avatar_view: Control = create_avatar_holder(64, true)
+	avatar_box.add_child(avatar_view)
+
+	var avatar_actions: VBoxContainer = VBoxContainer.new()
+	avatar_row.add_child(avatar_actions)
+	var choose_avatar_button: Button = make_button("Выбрать фото", open_avatar_picker)
+	choose_avatar_button.custom_minimum_size = Vector2(166, 43)
+	avatar_actions.add_child(choose_avatar_button)
+	var reset_avatar_button: Button = make_button("Убрать фото", clear_avatar)
+	reset_avatar_button.custom_minimum_size = Vector2(166, 40)
+	avatar_actions.add_child(reset_avatar_button)
+
 	nick_input = LineEdit.new()
 	nick_input.placeholder_text = "Введи свой ник"
-	nick_input.text = "Игрок"
+	nick_input.text = player_nick
 	nick_input.max_length = 18
 	nick_input.custom_minimum_size = Vector2(250, 48)
 
@@ -562,6 +721,17 @@ func create_menu() -> void:
 	)
 
 	column.add_child(nick_input)
+
+	column.add_child(make_label("СЛОЖНОСТЬ СОПЕРНИКА", 14, GOLD))
+	difficulty_select = OptionButton.new()
+	difficulty_select.add_item("Лёгкий", 0)
+	difficulty_select.add_item("Средний", 1)
+	difficulty_select.add_item("Сложный", 2)
+	difficulty_select.select(clampi(bot_difficulty, 0, 2))
+	difficulty_select.custom_minimum_size = Vector2(270, 44)
+	difficulty_select.add_theme_font_size_override("font_size", 17)
+	difficulty_select.item_selected.connect(on_difficulty_changed)
+	column.add_child(difficulty_select)
 
 	column.add_child(
 		make_button("▶ ИГРАТЬ", start_game)
@@ -771,9 +941,15 @@ func create_game_screen() -> void:
 	status_label.custom_minimum_size = Vector2(0, 57)
 	root.add_child(status_label)
 
-	# Ник и счётчик.
+	# Nickname and avatar beside the player's hand.
+	var player_row: HBoxContainer = HBoxContainer.new()
+	player_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_child(player_row)
+	var player_avatar_box: PanelContainer = make_style_avatar_box(46)
+	player_row.add_child(player_avatar_box)
+	player_avatar_box.add_child(create_avatar_holder(42, false))
 	player_label = make_label("", 17, GOLD)
-	root.add_child(player_label)
+	player_row.add_child(player_label)
 
 	# Рука игрока.
 	var hand_scroll: ScrollContainer = ScrollContainer.new()
@@ -829,6 +1005,15 @@ func create_game_screen() -> void:
 # ==========================================
 
 func create_dialogs() -> void:
+	avatar_dialog = FileDialog.new()
+	avatar_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	avatar_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	avatar_dialog.use_native_dialog = true
+	avatar_dialog.title = "Выбрать аватарку"
+	avatar_dialog.filters = PackedStringArray(["*.png,*.jpg,*.jpeg,*.webp;Изображения"])
+	avatar_dialog.file_selected.connect(on_avatar_file_selected)
+	add_child(avatar_dialog)
+
 	rules_dialog = AcceptDialog.new()
 	rules_dialog.title = "Правила JokerShift"
 	rules_dialog.ok_button_text = "Понятно"
