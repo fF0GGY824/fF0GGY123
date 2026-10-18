@@ -106,8 +106,8 @@ class SuitIcon extends Control:
 		if suit.is_empty():
 			return
 
-		var center: Vector2 = Vector2(size.x * 0.5, size.y * (0.60 if card_icon else 0.5))
-		var r: float = minf(size.x * 0.30, size.y * (0.23 if card_icon else 0.36))
+		var center: Vector2 = Vector2(size.x * 0.5, size.y * (0.55 if card_icon else 0.5))
+		var r: float = minf(size.x * 0.29, size.y * (0.19 if card_icon else 0.36))
 		if r < 2.0:
 			return
 
