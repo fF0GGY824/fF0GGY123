@@ -31,6 +31,10 @@ var player_nick: String = "Игрок"
 var selected_index: int = -1
 var selected_pair: int = -1
 var status_text: String = ""
+# Cache UI visual state to avoid reconstructing every card on status changes.
+var last_table_visual_key: String = ""
+var last_hand_visual_key: String = ""
+var last_trump_visual_key: String = ""
 
 var menu_screen: Control
 var game_screen: Control
@@ -1068,6 +1072,9 @@ func show_rules() -> void:
 
 func adapt_layout() -> void:
 	var width: float = get_viewport_rect().size.x
+	# Card sizes change when the viewport changes; invalidate caches.
+	last_table_visual_key = ""
+	last_hand_visual_key = ""
 
 	card_width = clampf(width * 0.19, 54.0, 82.0)
 	card_height = card_width * 1.48
@@ -1087,6 +1094,8 @@ func adapt_layout() -> void:
 # ==========================================
 
 func new_game() -> void:
+	last_table_visual_key = ""
+	last_hand_visual_key = ""
 	deck.clear()
 	player_hand.clear()
 	bot_hand.clear()
@@ -1218,6 +1227,10 @@ func trump_display_name() -> String:
 func update_trump_symbol() -> void:
 	if trump_icon_row == null:
 		return
+	var visual_key: String = trump_mode + "|" + trump_suit
+	if visual_key == last_trump_visual_key:
+		return
+	last_trump_visual_key = visual_key
 	clear_children(trump_icon_row)
 	var suits_to_draw: Array[String] = []
 	match trump_mode:
@@ -2601,89 +2614,95 @@ func update_ui() -> void:
 	deck_panel.visible = not deck.is_empty()
 	status_label.text = status_text
 
-	clear_children(table_grid)
+	var table_key: String = JSON.stringify(table_cards)
+	if table_key != last_table_visual_key:
+		last_table_visual_key = table_key
+		clear_children(table_grid)
 
-	# Пустой стол.
-	if table_cards.is_empty():
-		var empty_button: Button = make_button(
-			"НАЖМИ СЮДА\nДЛЯ ХОДА",
-			field_pressed
-		)
-
-		empty_button.custom_minimum_size = Vector2(
-			135,
-			90
-		)
-
-		table_grid.add_child(empty_button)
-
-	# Карты на столе.
-	for i in range(table_cards.size()):
-		var pair: Dictionary = table_cards[i]
-
-		var column: VBoxContainer = VBoxContainer.new()
-
-		column.add_theme_constant_override(
-			"separation",
-			3
-		)
-
-		var attack_card: GameCard = make_card_view(
-			pair["attack"],
-			"attack",
-			-1,
-			i
-		)
-
-		column.add_child(attack_card)
-
-		if pair["defense"].is_empty():
-			var defense_target: Button = make_button(
-				"↓ Защита",
-				table_card_pressed.bind(
-					"attack",
-					i
-				)
+		# Пустой стол.
+		if table_cards.is_empty():
+			var empty_button: Button = make_button(
+				"НАЖМИ СЮДА\nДЛЯ ХОДА",
+				field_pressed
 			)
 
-			defense_target.custom_minimum_size = Vector2(
-				card_width,
-				35
+			empty_button.custom_minimum_size = Vector2(
+				135,
+				90
 			)
 
-			column.add_child(defense_target)
+			table_grid.add_child(empty_button)
 
-		else:
-			var defense_card: GameCard = make_card_view(
-				pair["defense"],
-				"defense",
+		# Карты на столе.
+		for i in range(table_cards.size()):
+			var pair: Dictionary = table_cards[i]
+
+			var column: VBoxContainer = VBoxContainer.new()
+
+			column.add_theme_constant_override(
+				"separation",
+				3
+			)
+
+			var attack_card: GameCard = make_card_view(
+				pair["attack"],
+				"attack",
 				-1,
 				i
 			)
 
-			column.add_child(defense_card)
+			column.add_child(attack_card)
 
-		table_grid.add_child(column)
+			if pair["defense"].is_empty():
+				var defense_target: Button = make_button(
+					"↓ Защита",
+					table_card_pressed.bind(
+						"attack",
+						i
+					)
+				)
 
-		animate_in(
-			column,
-			minf(float(i) * 0.035, 0.15)
-		)
+				defense_target.custom_minimum_size = Vector2(
+					card_width,
+					35
+				)
+
+				column.add_child(defense_target)
+
+			else:
+				var defense_card: GameCard = make_card_view(
+					pair["defense"],
+					"defense",
+					-1,
+					i
+				)
+
+				column.add_child(defense_card)
+
+			table_grid.add_child(column)
+
+			animate_in(
+				column,
+				minf(float(i) * 0.035, 0.15)
+			)
 
 	# Карты игрока.
-	clear_children(hand_row)
+	var hand_key: String = JSON.stringify(player_hand) + "|" + str(selected_index)
+	if hand_key != last_hand_visual_key:
+		last_hand_visual_key = hand_key
+		clear_children(hand_row)
 
-	for i in range(player_hand.size()):
-		var hand_card: GameCard = make_card_view(
-			player_hand[i],
-			"hand",
-			i,
-			-1
-		)
+		for i in range(player_hand.size()):
+			var hand_card: GameCard = make_card_view(
+				player_hand[i],
+				"hand",
+				i,
+				-1
+			)
 
-		hand_row.add_child(hand_card)
+			hand_row.add_child(hand_card)
 
-		animate_in(
-			hand_card,
-			minf(float(i) * 0.025, 0.15)
-		)
+			animate_in(
+				hand_card,
+				minf(float(i) * 0.025, 0.15)
+			)
