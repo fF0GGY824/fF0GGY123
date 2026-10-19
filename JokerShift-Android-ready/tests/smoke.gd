@@ -328,9 +328,8 @@ func _run() -> void:
 	verify(game.enemy_backs != null and game.enemy_backs.get_child_count() == game.bot_hand.size(), "Computer hand is shown as separate card backs")
 	verify(game.discard_label != null and game.discard_label.text.contains("БИТО"), "Visible discard counter exists")
 
-	# A bot should draw one card at a time while trying to defend, even if
-	# its hand is already six cards. The first drawn card does not defend,
-	# but the second one does.
+
+	# Bot draws up to a hand of SIX when defending; never above that.
 	game.attacker = 0
 	game.bot_takes = false
 	game.finished = false
@@ -345,16 +344,54 @@ func _run() -> void:
 	]
 	game.deck = [normal_card(12, "♣"), normal_card(8, "♦")]
 	game.bot_defend()
-	verify(game.deck.is_empty(), "Bot drew one card at a time until it found a defense above its six-card hand")
-	verify(game.card_rank(game.table_cards[0]["defense"]) == 12, "Bot defended with newly drawn card, not an illegal one")
-	verify(game.bot_hand.size() == 7, "Other drawn card remains in bot's hand")
-	verify(not game.bot_takes, "Bot does not pick up table when a drawn card can defend")
+	verify(game.deck.size() == 2, "Bot at six cards never draws a seventh")
+	verify(game.bot_hand.size() == 6 and game.bot_takes, "Bot takes the table instead of exceeding six-card hand")
+
+	game.bot_takes = false
+	game.bot_hand = [
+		normal_card(2, "♥"), normal_card(3, "♥"),
+		normal_card(4, "♥"), normal_card(5, "♥")
+	]
+	game.table_cards = [{"attack": normal_card(10, "♣"), "defense": {}, "slot_id": 0}]
+	game.deck = [normal_card(12, "♣"), normal_card(8, "♦")]
+	game.bot_defend()
+	verify(game.deck.is_empty(), "Bot draws cards one at a time while under six")
+	verify(
+		not game.table_cards[0]["defense"].is_empty()
+		and game.card_rank(game.table_cards[0]["defense"]) == 12,
+		"Bot defends with the matching card drawn from the deck"
+	)
+	verify(game.bot_hand.size() == 5, "After defense the bot has no more than six cards")
+	verify(not game.bot_takes, "A matching drawn card prevents taking the table")
+
 	game.bot_hand = [normal_card(2, "♥")]
 	game.table_cards = [{"attack": normal_card(10, "♣"), "defense": {}, "slot_id": 0}]
 	game.deck.clear()
 	game.bot_takes = false
 	game.bot_defend()
-	verify(game.bot_takes, "When deck is empty and bot cannot defend, it takes the cards")
+	verify(game.bot_takes, "With empty deck and no defense bot takes cards")
+
+	# With four covered cards and two cards remaining in defender's hand,
+	# the attacking player may throw at most two additional cards.
+	game.first_round = false
+	game.attacker = 0
+	game.table_cards.clear()
+	for i in range(4):
+		game.table_cards.append({
+			"attack": normal_card(6 + i, "♣"),
+			"defense": normal_card(7 + i, "♣"),
+			"slot_id": i
+		})
+	game.bot_hand = [normal_card(2, "♥"), normal_card(3, "♥")]
+	verify(game.defender_attack_limit() == 6, "Four defenses and two cards left permit at most six attacks")
+	for i in range(2):
+		game.table_cards.append({
+			"attack": normal_card(10 + i, "♦"),
+			"defense": {},
+			"slot_id": i + 4
+		})
+	verify(game.defender_attack_limit() == 6, "Seventh throw is blocked after two additional cards")
+	game.new_game()
 
 	# The old defense rank stays playable as a throw-in AFTER player
 	# swaps 10 clubs for 7 clubs. Hard difficulty always throws a legal card.
