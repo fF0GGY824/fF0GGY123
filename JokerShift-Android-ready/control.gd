@@ -54,6 +54,11 @@ const AVATAR_SAVE_PATH = "user://avatar.png"
 const PROFILE_SAVE_PATH = "user://profile.cfg"
 const MAX_AVATAR_FILE_BYTES: int = 8 * 1024 * 1024
 const MAX_AVATAR_SIDE: int = 384
+# Card-face artwork supplied by the user. Existing card backs are unchanged.
+const CARD_ATLAS_PATH: String = "res://assets/cards_atlas.png"
+const CARD_ATLAS_W: int = 128
+const CARD_ATLAS_H: int = 196
+var card_atlas: Texture2D
 
 var rules_dialog: AcceptDialog
 var result_dialog: AcceptDialog
@@ -186,6 +191,20 @@ class GameCard extends Button:
 		focus_mode = Control.FOCUS_NONE
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
+		var texture: Texture2D = game.card_face_texture(card)
+		if texture != null:
+			var face: TextureRect = TextureRect.new()
+			face.name = "CardFaceArt"
+			face.texture = texture
+			face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			face.stretch_mode = TextureRect.STRETCH_SCALE
+			face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(face)
+			face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			mouse_entered.connect(_hover.bind(true))
+			mouse_exited.connect(_hover.bind(false))
+			return
+
 		mouse_entered.connect(_hover.bind(true))
 		mouse_exited.connect(_hover.bind(false))
 
@@ -254,6 +273,33 @@ class GameCard extends Button:
 		)
 
 	func _draw() -> void:
+		# Atlas art already contains ranks and suits. A copied Joker
+		# displays exactly which rank/suit it copied as a clear label.
+		if game.card_atlas != null and game.card_face_texture(card) != null:
+			if game.is_joker(card) and game.card_rank(card) >= 2:
+				var copied_text: String = (
+					"J → МЕТКА" if game.card_rank(card) == 100
+					else (
+						"J → "
+						+ game.rank_name(game.card_rank(card))
+						+ game.card_suit(card)
+					)
+				)
+				draw_rect(
+					Rect2(2.0, size.y - 22.0, size.x - 4.0, 20.0),
+					Color(0.08, 0.02, 0.15, 0.96)
+				)
+				draw_string(
+					get_theme_default_font(),
+					Vector2(4.0, size.y - 6.0),
+					copied_text,
+					HORIZONTAL_ALIGNMENT_LEFT,
+					-1,
+					maxi(9, int(size.x * 0.14)),
+					Color("#F5E8FF")
+				)
+			return
+
 		if card.is_empty():
 			return
 
@@ -453,6 +499,7 @@ func _ready() -> void:
 	randomize()
 	load_profile()
 	load_saved_avatar()
+	load_card_atlas()
 
 	set_anchors_and_offsets_preset(
 		Control.PRESET_FULL_RECT
@@ -649,6 +696,70 @@ func create_interface() -> void:
 
 # Profile and avatar stay local on the phone/computer.
 # A native file picker is available on Android 10+ and desktop OSes.
+# ==========================================
+# USER CARD ARTWORK
+# ==========================================
+
+func load_card_atlas() -> void:
+	card_atlas = null
+	if ResourceLoader.exists(CARD_ATLAS_PATH):
+		card_atlas = load(CARD_ATLAS_PATH) as Texture2D
+
+
+func card_face_texture(card: Dictionary) -> Texture2D:
+	if card_atlas == null:
+		return null
+
+	var row_index: int = -1
+	var col_index: int = -1
+	if is_joker(card):
+		row_index = 4
+		col_index = 0 if str(card.get("joker_color", "")) == "red" else 1
+	elif is_mark(card):
+		row_index = 4
+		col_index = 2
+	else:
+		match card_suit(card):
+			"♥":
+				row_index = 0
+			"♦":
+				row_index = 1
+			"♣":
+				row_index = 2
+			"♠":
+				row_index = 3
+		# Art columns: 1–10, Jack, Queen, King, Ace.
+		col_index = card_rank(card) - 1
+
+	if row_index == -1 or col_index < 0 or col_index > 13:
+		return null
+	var face: AtlasTexture = AtlasTexture.new()
+	face.atlas = card_atlas
+	face.region = Rect2(
+		col_index * CARD_ATLAS_W,
+		row_index * CARD_ATLAS_H,
+		CARD_ATLAS_W,
+		CARD_ATLAS_H
+	)
+	return face
+
+
+# A defender can face no more attacks than the cards they still hold
+# plus cards already spent on defenses this round.
+func defender_attack_limit() -> int:
+	var available: int = (
+		bot_hand.size() if attacker == 0 else player_hand.size()
+	)
+	var defended: int = 0
+	for pair in table_cards:
+		if not pair["defense"].is_empty():
+			defended += 1
+	return mini(
+		round_limit(),
+		maxi(table_cards.size(), available + defended)
+	)
+
+
 func make_style_avatar_box(side: int) -> PanelContainer:
 	var panel: PanelContainer = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(side, side)
@@ -1728,7 +1839,7 @@ func can_drop_on_slot(hand_index: int, slot_id: int) -> bool:
 			return false
 		if table_cards.is_empty():
 			return not is_special(card)
-		if table_cards.size() >= round_limit():
+		if table_cards.size() >= defender_attack_limit():
 			return false
 		if not bot_takes and not all_defended():
 			return false
@@ -1813,7 +1924,7 @@ func can_transfer() -> bool:
 	if table_cards.is_empty():
 		return false
 
-	if table_cards.size() >= round_limit():
+	if table_cards.size() >= defender_attack_limit():
 		return false
 	if free_table_slot() == -1:
 		return false
@@ -1899,7 +2010,7 @@ func joker_action_valid(
 	if action == "throw":
 		return (
 			table_has_rank(card_rank(card))
-			and table_cards.size() < round_limit()
+			and table_cards.size() < defender_attack_limit()
 		)
 
 	if action == "transfer":
@@ -2205,7 +2316,7 @@ func player_throw(
 		update_ui()
 		return
 
-	if table_cards.size() >= round_limit():
+	if table_cards.size() >= defender_attack_limit():
 		status_text = "Лимит карт на столе."
 		update_ui()
 		return
@@ -2437,9 +2548,9 @@ func bot_defend() -> void:
 						best_cost = cost
 
 		if best_index == -1:
-			# One card at a time. Retry this attack after EACH draw.
-			# It can draw beyond six when defense requires it.
-			if not deck.is_empty():
+			# Never draw beyond six cards in the bot's hand.
+			# If its hand is full, it must take the table.
+			if bot_hand.size() < 6 and not deck.is_empty():
 				bot_hand.append(deck.pop_back())
 				status_text = "Компьютер добирает 1 карту для защиты..."
 				update_ui()
@@ -2484,7 +2595,7 @@ func bot_throw() -> void:
 		return
 
 	if (
-		table_cards.size() >= round_limit()
+		table_cards.size() >= defender_attack_limit()
 		or player_hand.is_empty()
 	):
 		status_text = "Нажми «Бито!»."
