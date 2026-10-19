@@ -2114,7 +2114,7 @@ func player_throw(
 		return
 
 	if (
-		card_rank(card) == 100
+		(card_rank(card) == 100 and not is_joker(card))
 		or not table_has_rank(card_rank(card))
 	):
 		status_text = (
@@ -2156,7 +2156,7 @@ func player_transfer(
 		return
 
 	if (
-		card_rank(card) == 100
+		(card_rank(card) == 100 and not is_joker(card))
 		or not table_has_rank(card_rank(card))
 		or bot_hand.size() < table_cards.size() + 1
 	):
