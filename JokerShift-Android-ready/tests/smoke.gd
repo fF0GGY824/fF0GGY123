@@ -319,6 +319,76 @@ func _run() -> void:
 	game.player_defend(0, 0, mark)
 	verify(game.card_rank(game.table_cards[0]["defense"]) == 100, "Mark can be played as a defense")
 
+
+	# Animated UI is disabled by the headless runner but its live nodes,
+	# state flags and render targets must be wired correctly.
+	verify(not game.animation_enabled or game.motion_layer != null, "Card animation layer is initialized")
+	verify(game.has_method("play_deal_animation") and game.has_method("animate_collection") and game.has_method("animate_table_card"), "Shuffle, deal, pickup, and move animations are present")
+	game.new_game()
+	verify(game.enemy_backs != null and game.enemy_backs.get_child_count() == game.bot_hand.size(), "Computer hand is shown as separate card backs")
+	verify(game.discard_label != null and game.discard_label.text.contains("БИТО"), "Visible discard counter exists")
+
+	# A bot should draw one card at a time while trying to defend, even if
+	# its hand is already six cards. The first drawn card does not defend,
+	# but the second one does.
+	game.attacker = 0
+	game.bot_takes = false
+	game.finished = false
+	game.bot_difficulty = 1
+	game.trump_mode = "suit"
+	game.trump_suit = "♠"
+	game.table_cards = [{"attack": normal_card(10, "♣"), "defense": {}, "slot_id": 0}]
+	game.bot_hand = [
+		normal_card(2, "♥"), normal_card(3, "♥"),
+		normal_card(4, "♥"), normal_card(5, "♥"),
+		normal_card(6, "♥"), normal_card(7, "♥")
+	]
+	game.deck = [normal_card(12, "♣"), normal_card(8, "♦")]
+	game.bot_defend()
+	verify(game.deck.is_empty(), "Bot drew one card at a time until it found a defense above its six-card hand")
+	verify(game.card_rank(game.table_cards[0]["defense"]) == 12, "Bot defended with newly drawn card, not an illegal one")
+	verify(game.bot_hand.size() == 7, "Other drawn card remains in bot's hand")
+	verify(not game.bot_takes, "Bot does not pick up table when a drawn card can defend")
+	game.bot_hand = [normal_card(2, "♥")]
+	game.table_cards = [{"attack": normal_card(10, "♣"), "defense": {}, "slot_id": 0}]
+	game.deck.clear()
+	game.bot_takes = false
+	game.bot_defend()
+	verify(game.bot_takes, "When deck is empty and bot cannot defend, it takes the cards")
+
+	# The old defense rank stays playable as a throw-in AFTER player
+	# swaps 10 clubs for 7 clubs. Hard difficulty always throws a legal card.
+	game.new_game()
+	game.bot_difficulty = 2
+	game.attacker = 1
+	game.bot_takes = false
+	game.trump_mode = "suit"
+	game.trump_suit = "♠"
+	game.table_cards = [
+		{"attack": normal_card(6, "♣"), "defense": normal_card(10, "♣"), "slot_id": 0}
+	]
+	game.player_hand = [normal_card(7, "♣")]
+	game.bot_hand = [normal_card(10, "♥")]
+	game.player_replace(0, 0, game.player_hand[0])
+	verify(game.replaced_throw_ranks.has(10), "Previous defense rank remains legal after player changes their covering card")
+	verify(game.table_has_rank(10), "Bot knows it can throw the replaced card rank")
+	verify(game.table_cards.size() == 2, "Hard bot throws matching rank returned by replaced defense")
+	verify(game.card_rank(game.table_cards[1]["attack"]) == 10, "Bot's added card matches replaced defense rank")
+
+	# Bito must be rejected when any card remains uncovered.
+	game.new_game()
+	game.bot_takes = false
+	game.attacker = 1
+	game.table_cards = [{"attack": normal_card(9, "♣"), "defense": {}, "slot_id": 3}]
+	game.finish_round()
+	verify(game.table_cards.size() == 1, "Bito cannot clear an unbeaten attack")
+	game.table_cards[0]["defense"] = normal_card(10, "♣")
+	game.deck.clear()
+	game.finish_round()
+	verify(game.table_cards.is_empty(), "Finished Bito clears the field")
+	verify(game.discard_pile.size() >= 2, "Bito cards move to a visible discard counter")
+	game.new_game()
+
 	if failures == 0:
 		print("JOKERSHIFT FULL-GAME SMOKE TEST PASSED")
 	quit(1 if failures > 0 else 0)
