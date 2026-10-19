@@ -885,6 +885,17 @@ func create_menu() -> void:
 
 
 func show_menu() -> void:
+	# Cancels outstanding shuffle/deal/collection tweens safely.
+	animation_serial += 1
+	animation_busy = false
+	if motion_layer != null:
+		clear_children(motion_layer)
+	if hand_row != null:
+		hand_row.modulate.a = 1.0
+	if enemy_backs != null:
+		enemy_backs.modulate.a = 1.0
+	if table_grid != null:
+		table_grid.modulate.a = 1.0
 	game_screen.hide()
 	menu_screen.show()
 	animate_in(menu_screen)
