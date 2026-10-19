@@ -270,11 +270,14 @@ func _run() -> void:
 	root.add_child(mark_joker_view)
 	verify(mark_joker_view.get_node("SuitGlyph").suit == "mark", "Copied Mark is drawn as Mark on the Joker")
 	verify(game.card_name(joker_mark_copy).contains("Метка"), "Copied Mark name appears on Joker card")
+	verify(mark_joker_view.get_node_or_null("JokerCopiedValue") != null, "Copied Joker has large copy badge")
+	verify(mark_joker_view.get_node("JokerCopiedValue/CopyInfo/CopiedCard").text == "МЕТКА", "Copied Mark is readable in the middle of Joker card")
 	mark_joker_view.queue_free()
 	var hearts_joker_view: Variant = game.make_card_view(played_joker, "hand", -1, -1)
 	root.add_child(hearts_joker_view)
 	verify(hearts_joker_view.get_node("SuitGlyph").suit == "♥", "Copied heart is drawn visibly on the Joker")
 	verify(game.card_name(played_joker).contains("9♥"), "Joker name contains copied suit and value")
+	verify(hearts_joker_view.get_node("JokerCopiedValue/CopyInfo/CopiedCard").text == "9♥", "Joker card visibly tells which rank and suit it copied")
 	hearts_joker_view.queue_free()
 
 	# Translation with a Joker must copy a visible rank into a chosen empty square.
@@ -310,6 +313,33 @@ func _run() -> void:
 	game.player_replace(0, 0, cheaper)
 	verify(game.card_rank(game.table_cards[0]["defense"]) == 7, "Simplification replaces defense with a cheaper card")
 	verify(game.card_rank(game.player_hand[0]) == 10, "Previous defense returns to the player's hand")
+
+	# Replacing a high normal defense with a small trump is legal,
+	# but should require explicit confirmation before any card changes.
+	game.attacker = 1
+	game.bot_takes = false
+	game.finished = false
+	game.trump_mode = "suit"
+	game.trump_suit = "♥"
+	game.table_cards = [{
+		"attack": normal_card(4, "♦"),
+		"defense": normal_card(14, "♦"),
+		"slot_id": 3
+	}]
+	game.player_hand = [normal_card(2, "♥")]
+	game.bot_hand = []
+	verify(game.can_drop_on_slot(0, 3), "A small trump can be dragged onto a defense covering four diamonds")
+	game.player_replace(0, 0, game.player_hand[0])
+	verify(not game.pending_replacement.is_empty(), "An expensive or trump replacement prompts for confirmation")
+	verify(game.card_rank(game.table_cards[0]["defense"]) == 14, "Confirmation does not instantly replace the old defense")
+	verify(game.card_rank(game.player_hand[0]) == 2, "Before confirming, the trump remains in the hand")
+	verify(game.replace_confirmation.dialog_text.contains("козырь"), "Confirmation warns that a trump will be spent")
+	game.confirm_replacement()
+	verify(game.card_rank(game.table_cards[0]["defense"]) == 2 and game.card_suit(game.table_cards[0]["defense"]) == "♥", "Confirmed trump replacement covers the original attack")
+	verify(game.card_rank(game.player_hand[0]) == 14, "Old ace defense returns to hand after confirmed swap")
+	verify(game.replaced_throw_ranks.has(14), "Old ace rank stays legal for opponent throw-in")
+	game.replace_confirmation.hide()
+	game.new_game()
 
 	game.attacker = 1
 	game.bot_takes = true
