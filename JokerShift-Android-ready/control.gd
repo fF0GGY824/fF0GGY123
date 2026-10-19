@@ -3127,6 +3127,11 @@ func update_ui() -> void:
 			)
 			slot.add_child(attack_card)
 			attack_card.position = Vector2.ZERO
+			var attack_visual_key: String = "%d:attack" % i
+			var attack_signature: String = JSON.stringify(pair["attack"])
+			if remembered_table_faces.get(attack_visual_key, "") != attack_signature:
+				remembered_table_faces[attack_visual_key] = attack_signature
+				animate_table_card(attack_card, false, attacker == 1)
 
 			if pair["defense"].is_empty():
 				var defend_button: Button = make_button(
@@ -3142,6 +3147,11 @@ func update_ui() -> void:
 				)
 				slot.add_child(defense_card)
 				defense_card.position = Vector2(9, 20)
+				var defense_visual_key: String = "%d:defense" % i
+				var defense_signature: String = JSON.stringify(pair["defense"])
+				if remembered_table_faces.get(defense_visual_key, "") != defense_signature:
+					remembered_table_faces[defense_visual_key] = defense_signature
+					animate_table_card(defense_card, true, attacker == 0)
 
 			animate_in(slot, minf(float(i) * 0.02, 0.16))
 
