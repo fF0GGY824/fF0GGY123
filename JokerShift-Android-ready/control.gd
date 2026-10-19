@@ -73,6 +73,8 @@ var animation_serial: int = 0
 var animation_enabled: bool = true
 var last_enemy_visual_key: String = ""
 var remembered_table_faces: Dictionary = {}
+var finale_overlay: Control
+var finale_id: int = 0
 
 var bot_label: Label
 var player_label: Label
@@ -996,6 +998,7 @@ func create_menu() -> void:
 
 
 func show_menu() -> void:
+	clear_finale()
 	# Cancels outstanding shuffle/deal/collection tweens safely.
 	animation_serial += 1
 	animation_busy = false
@@ -1436,6 +1439,7 @@ func adapt_layout() -> void:
 # ==========================================
 
 func new_game() -> void:
+	clear_finale()
 	last_table_visual_key = ""
 	last_hand_visual_key = ""
 	replaced_throw_ranks.clear()
@@ -2897,6 +2901,186 @@ func finish_round() -> void:
 # ПОБЕДА
 # ==========================================
 
+# ==========================================
+# FINALE — PROCEDURAL CONFETTI AND GLOW
+# ==========================================
+
+func clear_finale() -> void:
+	finale_id += 1
+	if finale_overlay != null and is_instance_valid(finale_overlay):
+		finale_overlay.queue_free()
+	finale_overlay = null
+
+
+func show_finale(won: bool, result_text: String) -> void:
+	if not animation_enabled:
+		result_dialog.dialog_text = result_text
+		result_dialog.popup_centered()
+		return
+
+	clear_finale()
+	var cycle: int = finale_id
+	var bounds: Vector2 = get_viewport_rect().size
+	var mid: Vector2 = bounds * 0.5
+	var accent: Color = (
+		Color("#FFD88A") if won else Color("#FF648A")
+	)
+
+	finale_overlay = Control.new()
+	finale_overlay.name = "GameFinale"
+	finale_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(finale_overlay)
+	finale_overlay.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
+
+	var shade: ColorRect = ColorRect.new()
+	shade.color = Color(0.05, 0.0, 0.1, 0.0)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	finale_overlay.add_child(shade)
+	shade.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
+	var shade_tween: Tween = create_tween()
+	shade_tween.tween_property(
+		shade, "color",
+		Color(0.04, 0.01, 0.08, 0.9) if won
+		else Color(0.16, 0.01, 0.07, 0.94),
+		0.46
+	)
+
+	for i in range(40 if won else 22):
+		var particle: Label = Label.new()
+		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		particle.text = str(
+			["✦", "★", "♥", "♦", "♠", "♣"][i % 6]
+			if won else ["✦", "◆", "♦"][i % 3]
+		)
+		particle.add_theme_font_size_override(
+			"font_size", randi_range(13, 29)
+		)
+		particle.add_theme_color_override(
+			"font_color",
+			[
+				Color("#FFE9A9"), Color("#DAB0FF"),
+				Color("#FF77CD"), Color("#89EEFF")
+			][i % 4] if won else
+			[Color("#FF386B"), Color("#9640B0")][i % 2]
+		)
+		finale_overlay.add_child(particle)
+		var source: Vector2 = (
+			mid if won
+			else Vector2(randf() * bounds.x, randf_range(-100.0, -25.0))
+		)
+		var angle: float = randf_range(0.0, TAU)
+		var distance: float = randf_range(
+			90.0, maxf(110.0, minf(bounds.x, bounds.y) * 0.57)
+		)
+		var destination: Vector2 = (
+			source + Vector2(cos(angle), sin(angle)) * distance
+			if won else
+			Vector2(
+				source.x + randf_range(-100.0, 100.0),
+				bounds.y + 40.0
+			)
+		)
+		particle.position = source
+		particle.modulate.a = 0.0
+		var flight: Tween = create_tween()
+		flight.set_parallel(true)
+		flight.tween_property(
+			particle, "position", destination,
+			randf_range(1.4, 2.5)
+		).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		flight.tween_property(
+			particle, "rotation",
+			randf_range(-4.0, 4.0), 1.6
+		)
+		flight.tween_property(
+			particle, "modulate:a", 1.0, 0.23
+		)
+		flight.chain().tween_property(
+			particle, "modulate:a", 0.0, 0.7
+		).set_delay(0.65)
+
+	var centered: CenterContainer = CenterContainer.new()
+	finale_overlay.add_child(centered)
+	centered.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
+
+	var panel: PanelContainer = PanelContainer.new()
+	panel.custom_minimum_size = Vector2(
+		minf(380.0, bounds.x - 24.0), 235.0
+	)
+	panel.add_theme_stylebox_override(
+		"panel",
+		make_style(
+			Color("#291044") if won else Color("#2A0918"),
+			accent, 18
+		)
+	)
+	centered.add_child(panel)
+
+	var body: VBoxContainer = VBoxContainer.new()
+	body.add_theme_constant_override("separation", 11)
+	panel.add_child(body)
+
+	var icon_line: Label = make_label(
+		"✦ ✦ ✦" if won else "◆ ◆ ◆", 29, accent
+	)
+	body.add_child(icon_line)
+
+	var heading: Label = make_label(
+		"ПОБЕДА!" if won else "ПОРАЖЕНИЕ",
+		33, accent
+	)
+	body.add_child(heading)
+
+	var details: Label = make_label(result_text, 15, LIGHT)
+	details.custom_minimum_size = Vector2(0, 44)
+	body.add_child(details)
+
+	var replay: Button = make_button(
+		"↻ НОВАЯ ИГРА", new_game
+	)
+	replay.disabled = true
+	replay.modulate.a = 0.0
+	body.add_child(replay)
+
+	panel.pivot_offset = panel.custom_minimum_size * 0.5
+	panel.scale = Vector2(0.70, 0.70)
+	panel.modulate.a = 0.0
+
+	var entry: Tween = create_tween()
+	entry.set_parallel(true)
+	entry.tween_property(
+		panel, "scale", Vector2.ONE, 0.58
+	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	entry.tween_property(
+		panel, "modulate:a", 1.0, 0.36
+	)
+	entry.chain().tween_property(
+		replay, "modulate:a", 1.0, 0.28
+	).set_delay(0.34)
+	entry.chain().tween_callback(
+		func() -> void:
+			if finale_id == cycle and is_instance_valid(replay):
+				replay.disabled = false
+	)
+
+	var shimmer: Tween = create_tween()
+	shimmer.set_loops(3)
+	shimmer.tween_property(
+		icon_line, "modulate",
+		Color("#FFFFFF"), 0.22
+	)
+	shimmer.tween_property(
+		icon_line, "modulate",
+		accent, 0.33
+	)
+
+
 func only_special(hand: Array) -> bool:
 	if hand.is_empty():
 		return false
@@ -2926,8 +3110,8 @@ func check_winner() -> void:
 	if result.is_empty():
 		return
 	finished = true
-	result_dialog.dialog_text = result
-	result_dialog.popup_centered()
+	var won: bool = result.contains("ты победил")
+	show_finale(won, result)
 
 # ==========================================
 # СОЗДАНИЕ КАРТ НА ЭКРАНЕ
