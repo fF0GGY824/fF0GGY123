@@ -915,6 +915,7 @@ func create_game_screen() -> void:
 
 	add_child(game_screen)
 
+	animation_enabled = DisplayServer.get_name() != "headless"
 	# Transparent overlay for moving cards. It NEVER intercepts touches.
 	motion_layer = Control.new()
 	motion_layer.name = "CardMotionLayer"
@@ -1314,6 +1315,12 @@ func new_game() -> void:
 	last_enemy_visual_key = ""
 	animation_serial += 1
 	animation_busy = false
+	if hand_row != null:
+		hand_row.modulate.a = 1.0
+	if enemy_backs != null:
+		enemy_backs.modulate.a = 1.0
+	if table_grid != null:
+		table_grid.modulate.a = 1.0
 	if motion_layer != null:
 		clear_children(motion_layer)
 	deck.clear()
@@ -1381,7 +1388,9 @@ func new_game() -> void:
 	update_ui()
 	pulse(deck_panel)
 
-	if attacker == 1:
+	if animation_enabled:
+		play_deal_animation()
+	elif attacker == 1:
 		bot_attack()
 
 
@@ -2761,6 +2770,164 @@ func check_winner() -> void:
 # ==========================================
 # СОЗДАНИЕ КАРТ НА ЭКРАНЕ
 # ==========================================
+
+# ==================================================
+# CARD ANIMATIONS (no images/textures required)
+# ==================================================
+
+func local_ghost_point(control: Control) -> Vector2:
+	if control == null or motion_layer == null:
+		return Vector2.ZERO
+	return control.get_global_rect().get_center() - motion_layer.get_global_rect().position
+
+
+func fly_back(start: Vector2, finish: Vector2, duration: float = 0.23) -> void:
+	if not animation_enabled or motion_layer == null:
+		return
+	var ghost: PanelContainer = make_card_back(
+		maxf(37.0, card_width * 0.60),
+		maxf(49.0, card_width * 0.80)
+	)
+	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	motion_layer.add_child(ghost)
+	ghost.position = start - ghost.custom_minimum_size * 0.5
+	var tween: Tween = create_tween()
+	tween.tween_property(
+		ghost, "position",
+		finish - ghost.custom_minimum_size * 0.5,
+		duration
+	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(ghost, "modulate:a", 0.20, duration)
+	tween.tween_callback(ghost.queue_free)
+
+
+func fly_face(card: Dictionary, start: Vector2, finish: Vector2, duration: float = 0.32) -> void:
+	if not animation_enabled or motion_layer == null:
+		return
+	var ghost: GameCard = make_card_view(card, "ghost", -1, -1)
+	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ghost.disabled = true
+	motion_layer.add_child(ghost)
+	ghost.position = start - ghost.custom_minimum_size * 0.5
+	var tween: Tween = create_tween()
+	tween.tween_property(
+		ghost, "position",
+		finish - ghost.custom_minimum_size * 0.5,
+		duration
+	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(ghost, "modulate:a", 0.12, duration)
+	tween.tween_callback(ghost.queue_free)
+
+
+# Animated shuffle followed by twelve cards dealt one at a time.
+# Logical hands are created immediately so the game state is always
+# consistent; gestures are locked while their visual deal completes.
+func play_deal_animation() -> void:
+	animation_busy = true
+	var serial: int = animation_serial
+	hand_row.modulate.a = 0.0
+	enemy_backs.modulate.a = 0.0
+	status_text = "Перемешиваем колоду..."
+	update_ui()
+
+	# Small crossing motions depict a shuffle.
+	for i in range(5):
+		if serial != animation_serial:
+			return
+		var center: Vector2 = local_ghost_point(deck_panel)
+		var direction: float = -1.0 if i % 2 == 0 else 1.0
+		fly_back(
+			center + Vector2(direction * 19.0, -14.0),
+			center + Vector2(-direction * 19.0, 14.0),
+			0.19
+		)
+		await get_tree().create_timer(0.075).timeout
+
+	if serial != animation_serial:
+		return
+	status_text = "Раздаём карты..."
+	update_ui()
+
+	# Six rounds, one card to each side per round.
+	for i in range(6):
+		if serial != animation_serial:
+			return
+		var deck_center: Vector2 = local_ghost_point(deck_panel)
+		fly_back(deck_center, local_ghost_point(enemy_back_scroll), 0.23)
+		await get_tree().create_timer(0.07).timeout
+		if serial != animation_serial:
+			return
+		fly_back(deck_center, local_ghost_point(hand_scroll), 0.23)
+		await get_tree().create_timer(0.09).timeout
+
+	if serial != animation_serial:
+		return
+	hand_row.modulate.a = 1.0
+	enemy_backs.modulate.a = 1.0
+	animation_busy = false
+	status_text = (
+		"Первым ходит компьютер."
+		if attacker == 1
+		else "Твой ход."
+	)
+	update_ui()
+	if attacker == 1:
+		bot_attack()
+
+
+# The table is deliberately not cleared until this animation finishes.
+# User input is locked, so Bito cannot be pressed twice.
+func animate_collection(to_bot: bool) -> void:
+	if not animation_enabled or motion_layer == null:
+		return
+	animation_busy = true
+	var serial: int = animation_serial
+	var destination: Control = enemy_back_scroll if to_bot else hand_scroll
+	var finish: Vector2 = local_ghost_point(destination)
+
+	for pair_index in range(table_cards.size()):
+		var pair: Dictionary = table_cards[pair_index]
+		var slot: int = slot_for_pair(pair_index)
+		if slot < 0 or slot >= table_grid.get_child_count():
+			continue
+		var slot_node: Control = table_grid.get_child(slot) as Control
+		var start: Vector2 = local_ghost_point(slot_node)
+		fly_face(pair["attack"], start, finish, 0.34)
+		if not pair["defense"].is_empty():
+			fly_face(
+				pair["defense"],
+				start + Vector2(8.0, 18.0),
+				finish + Vector2(12.0, 0.0),
+				0.36
+			)
+
+	table_grid.modulate.a = 0.42
+	await get_tree().create_timer(0.41).timeout
+	if serial != animation_serial:
+		return
+	table_grid.modulate.a = 1.0
+	animation_busy = false
+
+
+# New played cards slide into their chosen slot. Attacks enter from
+# the owner, defenses land diagonally on top of the attack.
+func animate_table_card(card_view: GameCard, defense: bool, from_bot: bool) -> void:
+	if not animation_enabled:
+		return
+	var target: Vector2 = card_view.position
+	var offset: Vector2
+	if defense:
+		offset = Vector2(-16.0, 52.0)
+	else:
+		offset = Vector2(0.0, -88.0 if from_bot else 86.0)
+	card_view.position = target + offset
+	card_view.modulate.a = 0.45
+	var tween: Tween = create_tween()
+	tween.tween_property(
+		card_view, "position", target, 0.22
+	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(card_view, "modulate:a", 1.0, 0.22)
+
 
 func make_card_view(
 	card: Dictionary,
