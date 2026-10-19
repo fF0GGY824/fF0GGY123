@@ -40,6 +40,55 @@ func _run() -> void:
 		verify(rules_content.text.contains("ПОДКИДЫВАНИЕ") and rules_content.text.contains("ДЖОКЕР"), "Rules have short highlighted sections")
 		verify(rules_content.text.contains("ещё 2") and rules_content.text.contains("пока тебя атакуют"), "Rules explain six-card throw cap and final Joker defense")
 
+	# The user supplied only ranks 1–10 and two Joker drawings.
+	# Verify exact sheet coordinates and avoid blank image regions for J/Q/K/A.
+	var atlas_image: Image = Image.create(
+		14 * game.CARD_ATLAS_W, 5 * game.CARD_ATLAS_H,
+		false, Image.FORMAT_RGBA8
+	)
+	game.card_atlas = ImageTexture.create_from_image(atlas_image)
+	var two_hearts: AtlasTexture = game.card_face_texture(
+		normal_card(2, "♥")
+	) as AtlasTexture
+	verify(two_hearts != null, "Original hearts rank 2 uses user artwork")
+	if two_hearts != null:
+		verify(
+			two_hearts.region.position == Vector2(128, 0),
+			"Hearts rank 2 reads second face in original hearts row"
+		)
+	var ten_spades: AtlasTexture = game.card_face_texture(
+		normal_card(10, "♠")
+	) as AtlasTexture
+	verify(
+		ten_spades != null and ten_spades.region.position == Vector2(1152, 588),
+		"Original magenta spade 10 reads correct artwork"
+	)
+	verify(
+		game.card_face_texture(normal_card(11, "♥")) == null
+		and game.card_face_texture(normal_card(14, "♠")) == null,
+		"Unprovided J/Q/K/A have original fallback instead of blank cards"
+	)
+	var art_mark: Dictionary = {
+		"special": "mark", "rank": 22, "suit": "",
+		"joker_color": "", "copy_rank": -1, "copy_suit": ""
+	}
+	var art_joker: Dictionary = {
+		"special": "joker", "rank": 20, "suit": "",
+		"joker_color": "red", "copy_rank": -1, "copy_suit": ""
+	}
+	verify(
+		game.card_face_texture(art_mark) == null,
+		"Mark not supplied in original images uses vector fallback"
+	)
+	var red_joker_art: AtlasTexture = game.card_face_texture(
+		art_joker
+	) as AtlasTexture
+	verify(
+		red_joker_art != null and red_joker_art.region.position == Vector2(0, 784),
+		"Original red Joker illustration is selected in sprite sheet"
+	)
+	game.card_atlas = null
+
 	game.start_game()
 	verify(game.game_screen.visible and not game.menu_screen.visible, "Start button shows the game")
 	# Regression: the player nickname used to wrap into a thin vertical strip,
