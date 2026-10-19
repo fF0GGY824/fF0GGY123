@@ -14,6 +14,9 @@ var player_hand: Array = []
 var bot_hand: Array = []
 var table_cards: Array = []
 var discard_pile: Array = []
+# Old defenses returned to the defender's hand can still be thrown
+# against in this round. Store their ranks, not just visible cards.
+var replaced_throw_ranks: Array[int] = []
 
 var trump_mode: String = "suit"
 var trump_suit: String = ""
@@ -1248,6 +1251,7 @@ func adapt_layout() -> void:
 func new_game() -> void:
 	last_table_visual_key = ""
 	last_hand_visual_key = ""
+	replaced_throw_ranks.clear()
 	deck.clear()
 	player_hand.clear()
 	bot_hand.clear()
@@ -1578,6 +1582,8 @@ func all_defended() -> bool:
 
 
 func table_has_rank(rank: int) -> bool:
+	if replaced_throw_ranks.has(rank):
+		return true
 	for pair in table_cards:
 		if card_rank(pair["attack"]) == rank:
 			return true
@@ -2069,14 +2075,20 @@ func player_replace(
 		)
 
 	else:
+		# Replaced defense remains a legal throw-in rank this round,
+		# even though the old card physically returns to the hand.
+		if not replaced_throw_ranks.has(card_rank(old_card)):
+			replaced_throw_ranks.append(card_rank(old_card))
 		table_cards[pair_index]["defense"] = card
 		player_hand[index] = reset_joker(old_card)
-
 		selected_index = -1
-
 		status_text = (
-			"Упрощение! Старая карта вернулась в руку."
+			"Защита заменена! Бот может подкинуть достоинство старой карты."
 		)
+		update_ui()
+		if all_defended():
+			bot_throw()
+		return
 
 	update_ui()
 
@@ -2290,12 +2302,8 @@ func bot_defend() -> void:
 	if bot_try_transfer():
 		return
 
-	if bot_difficulty == 0 and randi_range(1, 100) <= 28:
-		bot_takes = true
-		status_text = "Компьютер (лёгкий) забирает. Подкинь или нажми «Бито!»."
-		update_ui()
-		return
-
+	# Even on easy difficulty, the bot tries to defend rather than
+	# randomly picking up before looking at its cards.
 	while true:
 		var pair_index: int = unbeaten_pair()
 
@@ -2337,8 +2345,12 @@ func bot_defend() -> void:
 						best_cost = cost
 
 		if best_index == -1:
-			if bot_hand.size() < 6 and not deck.is_empty():
-				draw_to_six(bot_hand)
+			# One card at a time. Retry this attack after EACH draw.
+			# It can draw beyond six when defense requires it.
+			if not deck.is_empty():
+				bot_hand.append(deck.pop_back())
+				status_text = "Компьютер добирает 1 карту для защиты..."
+				update_ui()
 				continue
 
 			bot_takes = true
@@ -2540,6 +2552,7 @@ func take_cards() -> void:
 			)
 
 	table_cards.clear()
+	replaced_throw_ranks.clear()
 
 	draw_to_six(player_hand)
 	draw_to_six(bot_hand)
@@ -2586,6 +2599,7 @@ func finish_round() -> void:
 				)
 
 		table_cards.clear()
+		replaced_throw_ranks.clear()
 
 		bot_takes = false
 		attacker = 0
@@ -2600,6 +2614,7 @@ func finish_round() -> void:
 				)
 
 		table_cards.clear()
+		replaced_throw_ranks.clear()
 
 		if attacker == 0:
 			draw_to_six(player_hand)
