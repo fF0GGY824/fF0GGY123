@@ -184,8 +184,20 @@ class GameCard extends Button:
 			icon.suit = "mark"
 			icon.ink = Color("#8732C8")
 		elif game.is_joker(card):
-			icon.suit = "joker"
-			icon.ink = Color("#D82E57") if str(card.get("joker_color", "")) == "red" else Color("#251530")
+			# Show the suit or Mark copied onto the played Joker.
+			if game.card_rank(card) == 100:
+				icon.suit = "mark"
+				icon.ink = Color("#8732C8")
+			elif game.card_rank(card) >= 2 and not game.card_suit(card).is_empty():
+				icon.suit = game.card_suit(card)
+				icon.ink = (
+					Color("#D82E57")
+					if icon.suit == "♥" or icon.suit == "♦"
+					else Color("#251530")
+				)
+			else:
+				icon.suit = "joker"
+				icon.ink = Color("#D82E57") if str(card.get("joker_color", "")) == "red" else Color("#251530")
 		add_child(icon)
 		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
@@ -254,8 +266,15 @@ class GameCard extends Button:
 		if game.is_joker(card):
 			rank = "J"
 			suit = "★"
-
-			if str(card.get("joker_color", "")) == "red":
+			if game.card_rank(card) == 100:
+				ink = Color("#8732C8")
+			elif game.card_rank(card) >= 2:
+				ink = (
+					Color("#D82E57")
+					if game.card_suit(card) == "♥" or game.card_suit(card) == "♦"
+					else Color("#251530")
+				)
+			elif str(card.get("joker_color", "")) == "red":
 				ink = Color("#D82E57")
 			else:
 				ink = Color("#251530")
@@ -299,10 +318,11 @@ class GameCard extends Button:
 			var subtitle: String = "ДЖОКЕР"
 
 			if game.card_rank(card) == 100:
-				subtitle = "МЕТКА"
+				subtitle = "→ МЕТКА"
 			elif game.card_rank(card) >= 2:
 				subtitle = (
-					game.rank_name(game.card_rank(card))
+					"→ "
+					+ game.rank_name(game.card_rank(card))
 					+ game.card_suit(card)
 				)
 
@@ -1523,40 +1543,23 @@ func reset_joker(card: Dictionary) -> Dictionary:
 # ПРАВИЛА ЗАЩИТЫ
 # ==========================================
 
-func can_beat(
-	card: Dictionary,
-	target: Dictionary
-) -> bool:
+func can_beat(card: Dictionary, target: Dictionary) -> bool:
+	# A Joker can copy ANY visible card, including Mark or another Joker.
+	# After copying it can cover an attack as a special card.
 	if is_mark(card):
 		return true
-
-	if is_joker(card) and card_rank(card) == 100:
-		return true
+	if is_joker(card):
+		return card_rank(card) >= 2
 
 	if card_rank(target) == 100:
 		return false
-
-	if is_joker(card):
-		return (
-			is_trump(target)
-			and card_rank(card) == card_rank(target)
-			and card_suit(card) == card_suit(target)
-		)
-
 	if is_trump(card) and is_trump(target):
 		return card_rank(card) > card_rank(target)
-
 	if is_trump(card):
 		return true
-
 	if is_trump(target):
 		return false
-
-	return (
-		card_suit(card) == card_suit(target)
-		and card_rank(card) > card_rank(target)
-	)
-
+	return card_suit(card) == card_suit(target) and card_rank(card) > card_rank(target)
 
 func round_limit() -> int:
 	return 8 if first_round else 10
@@ -1797,8 +1800,7 @@ func joker_action_valid(
 ) -> bool:
 	if action == "throw":
 		return (
-			card_rank(card) != 100
-			and table_has_rank(card_rank(card))
+			table_has_rank(card_rank(card))
 			and table_cards.size() < round_limit()
 		)
 
@@ -1806,7 +1808,6 @@ func joker_action_valid(
 		return (
 			can_transfer()
 			and bot_hand.size() >= table_cards.size() + 1
-			and card_rank(card) != 100
 			and table_has_rank(card_rank(card))
 		)
 
@@ -2211,9 +2212,7 @@ func bot_matching_card(index: int) -> Dictionary:
 		return {}
 
 	for target in table_targets():
-		if card_rank(target) == 100:
-			continue
-
+		# Marks and already-copied Jokers are also valid targets.
 		var copied: Dictionary = copy_joker(
 			card,
 			target
@@ -2660,53 +2659,25 @@ func only_special(hand: Array) -> bool:
 
 
 func check_winner() -> void:
-	if finished:
+	if finished or not deck.is_empty() or not table_cards.is_empty():
 		return
-
-	if not deck.is_empty():
-		return
-
-	if not table_cards.is_empty():
-		return
-
 	var result: String = ""
-
-	if only_special(player_hand) and only_special(bot_hand):
-		result = "Ничья! У обоих особые карты."
-
-	elif only_special(player_hand):
-		result = (
-			player_nick
-			+ ", ты проиграл! "
-			+ "Остались особые карты."
-		)
-
-	elif only_special(bot_hand):
-		result = (
-			player_nick
-			+ ", ты победил!"
-		)
-
-	elif player_hand.is_empty() and bot_hand.is_empty():
+	if player_hand.is_empty() and bot_hand.is_empty():
 		result = "Ничья!"
-
 	elif player_hand.is_empty():
-		result = (
-			player_nick
-			+ ", ты победил!"
-		)
-
+		result = player_nick + ", ты победил!"
 	elif bot_hand.is_empty():
 		result = "Компьютер победил!"
-
+	# A final Joker or Mark is NOT a loss while the opponent attacks.
+	elif only_special(player_hand) and attacker == 0:
+		result = "Компьютер победил! У тебя остались особые карты."
+	elif only_special(bot_hand) and attacker == 1:
+		result = player_nick + ", ты победил! У бота остались особые карты."
 	if result.is_empty():
 		return
-
 	finished = true
-
 	result_dialog.dialog_text = result
 	result_dialog.popup_centered()
-
 
 # ==========================================
 # СОЗДАНИЕ КАРТ НА ЭКРАНЕ
