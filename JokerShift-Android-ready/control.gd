@@ -72,6 +72,7 @@ var remembered_table_faces: Dictionary = {}
 var bot_label: Label
 var player_label: Label
 var deck_label: Label
+var discard_label: Label
 var trump_label: Label
 var trump_icon_row: HBoxContainer
 var status_label: Label
@@ -1080,6 +1081,8 @@ func create_game_screen() -> void:
 
 	deck_label = make_label("", 12)
 	deck_section.add_child(deck_label)
+	discard_label = make_label("БИТО: 0", 11, GOLD)
+	deck_section.add_child(discard_label)
 
 	var trump_section: VBoxContainer = VBoxContainer.new()
 	trump_section.add_theme_constant_override("separation", 4)
@@ -1169,6 +1172,8 @@ func create_game_screen() -> void:
 
 	actions.size_flags_horizontal = Control.SIZE_SHRINK_END
 	hand_actions_layout.add_child(actions)
+	# Card ghosts must render above the scrolling table and hands.
+	game_screen.move_child(motion_layer, game_screen.get_child_count() - 1)
 
 	actions.add_child(
 		make_button("Добрать", draw_cards)
@@ -1697,6 +1702,8 @@ func free_table_slot(preferred: int = -1) -> int:
 # Validate potential drops BEFORE showing a drop marker; invalid moves
 # leave cards in the player's hand rather than silently moving them.
 func can_drop_on_slot(hand_index: int, slot_id: int) -> bool:
+	if animation_busy:
+		return false
 	if finished or hand_index < 0 or hand_index >= player_hand.size():
 		return false
 	if slot_id < 0 or slot_id >= 10:
@@ -1826,7 +1833,7 @@ func economy_cost(card: Dictionary) -> int:
 # ==========================================
 
 func select_card(index: int) -> void:
-	if finished or index < 0 or index >= player_hand.size():
+	if finished or animation_busy or index < 0 or index >= player_hand.size():
 		return
 	selected_index = index
 	if attacker == 0:
@@ -2424,6 +2431,11 @@ func bot_defend() -> void:
 				bot_hand.append(deck.pop_back())
 				status_text = "Компьютер добирает 1 карту для защиты..."
 				update_ui()
+				fly_back(
+					local_ghost_point(deck_panel),
+					local_ghost_point(enemy_back_scroll),
+					0.27
+				)
 				continue
 
 			bot_takes = true
@@ -2586,7 +2598,7 @@ func bot_attack() -> void:
 # ==========================================
 
 func draw_cards() -> void:
-	if finished:
+	if finished or animation_busy:
 		return
 
 	if deck.is_empty():
@@ -2608,11 +2620,19 @@ func draw_cards() -> void:
 # ==========================================
 
 func take_cards() -> void:
-	if finished:
+	if finished or animation_busy:
 		return
 
 	if attacker != 1 or table_cards.is_empty():
 		return
+
+	var animation_expected: int = animation_serial
+	if animation_enabled:
+		status_text = "Карты возвращаются в твою руку..."
+		update_ui()
+		await animate_collection(false)
+		if animation_expected != animation_serial:
+			return
 
 	for pair in table_cards:
 		player_hand.append(
@@ -2626,6 +2646,7 @@ func take_cards() -> void:
 
 	table_cards.clear()
 	replaced_throw_ranks.clear()
+	remembered_table_faces.clear()
 
 	draw_to_six(player_hand)
 	draw_to_six(bot_hand)
@@ -2654,11 +2675,27 @@ func take_cards() -> void:
 # ==========================================
 
 func finish_round() -> void:
-	if finished:
+	if finished or animation_busy:
 		return
 
 	if table_cards.is_empty():
 		return
+
+	# Wait for the Bito animation before removing the actual cards.
+	if not bot_takes and not all_defended():
+		status_text = "Нельзя Бито: не все карты отбиты."
+		update_ui()
+		return
+	var animation_expected: int = animation_serial
+	if animation_enabled:
+		status_text = (
+			"Бот забирает карты..."
+			if bot_takes else "Бито! Карты уходят в отбой..."
+		)
+		update_ui()
+		await animate_collection(bot_takes, not bot_takes)
+		if animation_expected != animation_serial:
+			return
 
 	if bot_takes:
 		for pair in table_cards:
@@ -2673,6 +2710,7 @@ func finish_round() -> void:
 
 		table_cards.clear()
 		replaced_throw_ranks.clear()
+		remembered_table_faces.clear()
 
 		bot_takes = false
 		attacker = 0
@@ -2688,6 +2726,7 @@ func finish_round() -> void:
 
 		table_cards.clear()
 		replaced_throw_ranks.clear()
+		remembered_table_faces.clear()
 
 		if attacker == 0:
 			draw_to_six(player_hand)
@@ -2877,12 +2916,15 @@ func play_deal_animation() -> void:
 
 # The table is deliberately not cleared until this animation finishes.
 # User input is locked, so Bito cannot be pressed twice.
-func animate_collection(to_bot: bool) -> void:
+func animate_collection(to_bot: bool, to_discard: bool = false) -> void:
 	if not animation_enabled or motion_layer == null:
 		return
 	animation_busy = true
 	var serial: int = animation_serial
-	var destination: Control = enemy_back_scroll if to_bot else hand_scroll
+	var destination: Control = (
+		deck_panel if to_discard
+		else (enemy_back_scroll if to_bot else hand_scroll)
+	)
 	var finish: Vector2 = local_ghost_point(destination)
 
 	for pair_index in range(table_cards.size()):
@@ -3023,6 +3065,7 @@ func update_ui() -> void:
 	)
 
 	deck_label.text = "%d карт" % deck.size()
+	discard_label.text = "БИТО: %d" % discard_pile.size()
 	trump_label.text = trump_display_name()
 	update_trump_symbol()
 
