@@ -2503,7 +2503,7 @@ func bot_throw() -> void:
 		update_ui()
 		return
 
-	var throw_chance: int = 20 if bot_difficulty == 0 else (70 if bot_difficulty == 1 else 95)
+	var throw_chance: int = 20 if bot_difficulty == 0 else (70 if bot_difficulty == 1 else 100)
 	if randi_range(1, 100) > throw_chance:
 		status_text = (
 			"Компьютер больше не подкидывает. "
