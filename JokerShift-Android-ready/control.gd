@@ -64,6 +64,8 @@ var rules_dialog: AcceptDialog
 var result_dialog: AcceptDialog
 var joker_dialog: ConfirmationDialog
 var joker_options: VBoxContainer
+var replace_confirmation: ConfirmationDialog
+var pending_replacement: Dictionary = {}
 
 var enemy_backs: HBoxContainer
 var enemy_back_scroll: ScrollContainer
@@ -1026,6 +1028,9 @@ func create_menu() -> void:
 
 
 func show_menu() -> void:
+	pending_replacement.clear()
+	if replace_confirmation != null:
+		replace_confirmation.hide()
 	clear_finale()
 	# Cancels outstanding shuffle/deal/collection tweens safely.
 	animation_serial += 1
@@ -1441,6 +1446,17 @@ func create_dialogs() -> void:
 	)
 	rules_dialog.add_child(rules)
 
+	replace_confirmation = ConfirmationDialog.new()
+	replace_confirmation.name = "ReplaceConfirmation"
+	replace_confirmation.title = "Подтвердить замену защиты"
+	replace_confirmation.ok_button_text = "Да, заменить"
+	replace_confirmation.cancel_button_text = "Оставить как есть"
+	replace_confirmation.confirmed.connect(confirm_replacement)
+	replace_confirmation.canceled.connect(
+		func() -> void: pending_replacement.clear()
+	)
+	add_child(replace_confirmation)
+
 	joker_dialog = ConfirmationDialog.new()
 	joker_dialog.title = "Джокер — выбери карту"
 	joker_dialog.ok_button_text = "Закрыть"
@@ -1532,6 +1548,9 @@ func adapt_layout() -> void:
 # ==========================================
 
 func new_game() -> void:
+	pending_replacement.clear()
+	if replace_confirmation != null:
+		replace_confirmation.hide()
 	clear_finale()
 	last_table_visual_key = ""
 	last_hand_visual_key = ""
@@ -1959,13 +1978,7 @@ func can_drop_on_slot(hand_index: int, slot_id: int) -> bool:
 		var pair: Dictionary = table_cards[pair_index]
 		if pair["defense"].is_empty():
 			return is_joker(card) or can_beat(card, pair["attack"])
-		return (
-			is_joker(card)
-			or (
-				can_beat(card, pair["attack"])
-				and economy_cost(card) < economy_cost(pair["defense"])
-			)
-		)
+		return is_joker(card) or can_beat(card, pair["attack"])
 
 	# Translation is deliberately performed by placing an equal-rank
 	# card into an EMPTY square, not on top of an attacking card.
@@ -2159,7 +2172,6 @@ func joker_action_valid(
 		return (
 			not pair["defense"].is_empty()
 			and can_beat(card, pair["attack"])
-			and economy_cost(card) < economy_cost(pair["defense"])
 		)
 
 	return false
@@ -2372,49 +2384,120 @@ func player_replace(
 	pair_index: int,
 	card: Dictionary
 ) -> void:
-	if attacker != 1:
+	if finished or animation_busy or attacker != 1:
 		return
-
-	if (
-		pair_index < 0
-		or pair_index >= table_cards.size()
-	):
+	if index < 0 or index >= player_hand.size():
+		return
+	if pair_index < 0 or pair_index >= table_cards.size():
 		return
 
 	var pair: Dictionary = table_cards[pair_index]
-
 	if pair["defense"].is_empty():
 		return
 
 	var old_card: Dictionary = pair["defense"]
 
+	# The only strict rule is that the new card must beat the ORIGINAL
+	# attacking card. It can cost more or be a trump.
 	if not can_beat(card, pair["attack"]):
-		status_text = (
-			"Новая карта не отбивает атаку."
-		)
-
-	elif economy_cost(card) >= economy_cost(old_card):
-		status_text = (
-			"Новая карта не экономнее старой."
-		)
-
-	else:
-		# Replaced defense remains a legal throw-in rank this round,
-		# even though the old card physically returns to the hand.
-		if not replaced_throw_ranks.has(card_rank(old_card)):
-			replaced_throw_ranks.append(card_rank(old_card))
-		table_cards[pair_index]["defense"] = card
-		player_hand[index] = reset_joker(old_card)
-		selected_index = -1
-		status_text = (
-			"Защита заменена! Бот может подкинуть достоинство старой карты."
-		)
+		status_text = "Новая карта не отбивает атаку."
 		update_ui()
-		if all_defended():
-			bot_throw()
 		return
 
+	var wasteful: bool = (
+		(is_trump(card) and not is_trump(old_card))
+		or economy_cost(card) >= economy_cost(old_card)
+	)
+
+	if wasteful:
+		pending_replacement = {
+			"index": index,
+			"pair": pair_index,
+			"card": card.duplicate(true),
+			"old": old_card.duplicate(true),
+			"attack": pair["attack"].duplicate(true)
+		}
+		replace_confirmation.dialog_text = (
+			"Точно заменить защиту?\n\n"
+			+ "Атака: " + card_name(pair["attack"]) + "\n"
+			+ "Старая защита: " + card_name(old_card) + "\n"
+			+ "Новая защита: " + card_name(card) + "\n\n"
+			+ (
+				"⚠ Ты тратишь козырь!\n"
+				if is_trump(card) else
+				"⚠ Новая карта не экономнее старой.\n"
+			)
+			+ "Старая карта вернётся в руку, но её достоинство "
+			+ "останется доступным для подкидывания."
+		)
+		replace_confirmation.popup_centered(Vector2i(370, 280))
+		return
+
+	apply_replacement(index, pair_index, card)
+
+
+func confirm_replacement() -> void:
+	if pending_replacement.is_empty():
+		return
+
+	var request: Dictionary = pending_replacement.duplicate(true)
+	pending_replacement.clear()
+
+	var index: int = int(request["index"])
+	var pair_index: int = int(request["pair"])
+
+	if finished or animation_busy or attacker != 1:
+		return
+	if index < 0 or index >= player_hand.size():
+		return
+	if pair_index < 0 or pair_index >= table_cards.size():
+		return
+
+	var pair: Dictionary = table_cards[pair_index]
+	if JSON.stringify(pair["defense"]) != JSON.stringify(request["old"]):
+		return
+	if JSON.stringify(pair["attack"]) != JSON.stringify(request["attack"]):
+		return
+
+	if is_joker(request["card"]):
+		if not is_joker(player_hand[index]):
+			return
+		if str(request["card"]["joker_color"]) != str(player_hand[index]["joker_color"]):
+			return
+	elif JSON.stringify(player_hand[index]) != JSON.stringify(request["card"]):
+		return
+
+	apply_replacement(index, pair_index, request["card"])
+
+
+func apply_replacement(
+	index: int,
+	pair_index: int,
+	card: Dictionary
+) -> void:
+	if pair_index < 0 or pair_index >= table_cards.size():
+		return
+	if index < 0 or index >= player_hand.size():
+		return
+	var pair: Dictionary = table_cards[pair_index]
+	if pair["defense"].is_empty() or not can_beat(card, pair["attack"]):
+		return
+
+	var old_card: Dictionary = pair["defense"]
+	if not replaced_throw_ranks.has(card_rank(old_card)):
+		replaced_throw_ranks.append(card_rank(old_card))
+
+	table_cards[pair_index]["defense"] = card
+	player_hand[index] = reset_joker(old_card)
+	selected_index = -1
+
+	status_text = (
+		"Защита заменена на " + card_name(card) + ". "
+		+ "Бот может подкинуть достоинство старой защиты."
+	)
 	update_ui()
+	if all_defended():
+		bot_throw()
 
 
 # ==========================================
