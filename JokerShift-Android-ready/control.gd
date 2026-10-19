@@ -79,6 +79,7 @@ var status_label: Label
 
 var table_grid: GridContainer
 var hand_row: HBoxContainer
+var hand_scroll: ScrollContainer
 var deck_panel: PanelContainer
 var field_panel: GameField
 var battle_layout: GridContainer
@@ -1137,7 +1138,7 @@ func create_game_screen() -> void:
 	hand_actions_layout.add_theme_constant_override("v_separation", 7)
 	root.add_child(hand_actions_layout)
 
-	var hand_scroll: ScrollContainer = ScrollContainer.new()
+	hand_scroll = ScrollContainer.new()
 	hand_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	hand_scroll.name = "HandScroll"
