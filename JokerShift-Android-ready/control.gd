@@ -739,6 +739,10 @@ func load_card_atlas() -> void:
 
 
 func card_face_texture(card: Dictionary) -> Texture2D:
+	# The original artwork contains 1–10 in four suit rows,
+	# then TWO Jokers (red, black). It does not have J/Q/K/A or Mark.
+	# Return null for missing art so those faces remain readable
+	# with the existing vector drawing (rather than showing blanks).
 	if card_atlas == null:
 		return null
 
@@ -746,11 +750,15 @@ func card_face_texture(card: Dictionary) -> Texture2D:
 	var col_index: int = -1
 	if is_joker(card):
 		row_index = 4
-		col_index = 0 if str(card.get("joker_color", "")) == "red" else 1
+		col_index = (
+			0 if str(card.get("joker_color", "")) == "red" else 1
+		)
 	elif is_mark(card):
-		row_index = 4
-		col_index = 2
+		return null
 	else:
+		var rank: int = card_rank(card)
+		if rank < 1 or rank > 10:
+			return null
 		match card_suit(card):
 			"♥":
 				row_index = 0
@@ -760,11 +768,11 @@ func card_face_texture(card: Dictionary) -> Texture2D:
 				row_index = 2
 			"♠":
 				row_index = 3
-		# Art columns: 1–10, Jack, Queen, King, Ace.
-		col_index = card_rank(card) - 1
+		col_index = rank - 1
 
-	if row_index == -1 or col_index < 0 or col_index > 13:
+	if row_index < 0 or col_index < 0:
 		return null
+
 	var face: AtlasTexture = AtlasTexture.new()
 	face.atlas = card_atlas
 	face.region = Rect2(
