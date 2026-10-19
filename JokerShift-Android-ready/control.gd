@@ -203,6 +203,43 @@ class GameCard extends Button:
 			face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(face)
 			face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+			# A CanvasItem parent's _draw() appears BEHIND its children.
+			# This overlay must be a child added AFTER the atlas texture.
+			if game.is_joker(card) and game.card_rank(card) >= 2:
+				var copy_text: String = (
+					"J → МЕТКА" if game.card_rank(card) == 100
+					else (
+						"J → "
+						+ game.rank_name(game.card_rank(card))
+						+ game.card_suit(card)
+					)
+				)
+				var copy_bar: PanelContainer = PanelContainer.new()
+				copy_bar.name = "JokerCopiedValue"
+				copy_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				copy_bar.anchor_top = 1.0
+				copy_bar.anchor_bottom = 1.0
+				copy_bar.anchor_left = 0.0
+				copy_bar.anchor_right = 1.0
+				copy_bar.offset_top = -25.0
+				copy_bar.offset_bottom = -1.0
+				copy_bar.add_theme_stylebox_override(
+					"panel",
+					game.make_style(
+						Color(0.09, 0.02, 0.14, 0.97),
+						game.GOLD,
+						5
+					)
+				)
+				add_child(copy_bar)
+				var copy_label: Label = game.make_label(
+					copy_text, 11, game.LIGHT
+				)
+				copy_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+				copy_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				copy_bar.add_child(copy_label)
+
 			mouse_entered.connect(_hover.bind(true))
 			mouse_exited.connect(_hover.bind(false))
 			return
