@@ -238,6 +238,64 @@ func _run() -> void:
 	var copy: Dictionary = game.copy_joker(joker, attack)
 	verify(game.is_joker(copy) and game.card_rank(copy) == 6 and game.card_suit(copy) == "♣", "Joker copies rank and suit")
 
+	# Joker copies ALL visible table cards: attack, defense, played Joker, Mark.
+	var played_joker: Dictionary = game.copy_joker(joker, normal_card(9, "♥"))
+	var joker_mark_copy: Dictionary = game.copy_joker(joker, mark)
+	verify(game.card_rank(joker_mark_copy) == 100, "Joker also copies a Mark")
+	verify(game.can_beat(copy, normal_card(14, "♦")), "Joker copied from a non-trump can beat an unrelated attack")
+	verify(game.can_beat(joker_mark_copy, attack), "Joker copying Mark can cover an attack")
+	game.attacker = 1
+	game.finished = false
+	game.table_cards = [
+		{"attack": attack, "defense": {}, "slot_id": 0},
+		{"attack": normal_card(10, "♥"), "defense": normal_card(11, "♥"), "slot_id": 1},
+		{"attack": mark, "defense": normal_card(7, "♦"), "slot_id": 2},
+		{"attack": played_joker, "defense": {}, "slot_id": 3}
+	]
+	game.player_hand = [joker.duplicate(true)]
+	game.bot_hand = [normal_card(2, "♣"), normal_card(3, "♣")]
+	game.show_joker_choices("defend", 0, 0)
+	verify(game.joker_options.get_child_count() == 5, "Joker choice dialog offers attack cards, defense cards, Mark and played Joker")
+	game.choose_joker(mark)
+	verify(game.is_joker(game.table_cards[0]["defense"]) and game.card_rank(game.table_cards[0]["defense"]) == 100, "Chosen copied Mark is stored on the table as a Joker")
+	var mark_joker_view: Variant = game.make_card_view(joker_mark_copy, "hand", -1, -1)
+	root.add_child(mark_joker_view)
+	verify(mark_joker_view.get_node("SuitGlyph").suit == "mark", "Copied Mark is drawn as Mark on the Joker")
+	verify(game.card_name(joker_mark_copy).contains("Метка"), "Copied Mark name appears on Joker card")
+	mark_joker_view.queue_free()
+	var hearts_joker_view: Variant = game.make_card_view(played_joker, "hand", -1, -1)
+	root.add_child(hearts_joker_view)
+	verify(hearts_joker_view.get_node("SuitGlyph").suit == "♥", "Copied heart is drawn visibly on the Joker")
+	verify(game.card_name(played_joker).contains("9♥"), "Joker name contains copied suit and value")
+	hearts_joker_view.queue_free()
+
+	# Translation with a Joker must copy a visible rank into a chosen empty square.
+	game.attacker = 1
+	game.finished = false
+	game.bot_takes = false
+	game.table_cards = [{"attack": normal_card(6, "♣"), "defense": {}, "slot_id": 2}]
+	game.player_hand = [joker.duplicate(true)]
+	game.bot_hand = [normal_card(2, "♥"), normal_card(3, "♥"), normal_card(4, "♥")]
+	game.place_in_slot(0, 8)
+	verify(game.joker_options.get_child_count() == 1, "Joker transfer dialog lists matching visible card")
+	game.choose_joker(game.table_cards[0]["attack"])
+	verify(game.attacker == 0 and game.pair_at_slot(8) == 1 and game.card_rank(game.table_cards[1]["attack"]) == 6, "Joker transfer uses copied rank in chosen empty square")
+
+	# Last special card is not defeat when computer is attacking.
+	game.deck.clear()
+	game.table_cards.clear()
+	game.attacker = 1
+	game.finished = false
+	game.player_hand = [joker.duplicate(true)]
+	game.bot_hand = [normal_card(4, "♥")]
+	game.check_winner()
+	verify(not game.finished, "Final Joker is not an automatic loss when computer attacks")
+	game.attacker = 0
+	game.check_winner()
+	verify(game.finished, "Special-only hand loses when player must start attack")
+	game.new_game()
+
+
 	game.attacker = 1
 	game.table_cards = [{"attack": attack, "defense": stronger}]
 	game.player_hand = [cheaper]
