@@ -1370,24 +1370,84 @@ func create_dialogs() -> void:
 	add_child(avatar_dialog)
 
 	rules_dialog = AcceptDialog.new()
-	rules_dialog.title = "Правила JokerShift"
-	rules_dialog.ok_button_text = "Понятно"
-
+	rules_dialog.title = "✦ Как играть в JokerShift"
+	rules_dialog.ok_button_text = "ПОНЯТНО ✓"
+	rules_dialog.name = "RulesDialog"
 	add_child(rules_dialog)
 
-	var rules: Label = make_label(
-		"JokerShift — это «Дурак» с особенностями!\n\n"
-		+ "🃏 Джокер копирует карту со стола и может переводить.\n\n"
-		+ "✦ Метка отбивает любую карту.\n\n"
-		+ "♥♦ или ♠♣ могут стать козырями одного цвета.\n\n"
-		+ "↪ Перевод — картой того же достоинства.\n\n"
-		+ "✨ Упрощение — замени защиту более дешёвой картой.\n\n"
-		+ "Побеждает тот, кто первым избавится от карт. "
-		+ "Если остались только особые карты — проигрыш.",
-		15
+	# RichTextLabel wraps full words and has its OWN touch-friendly
+	# vertical scrollbar. No giant unwrapped Label on portrait screens.
+	var rules: RichTextLabel = RichTextLabel.new()
+	rules.name = "RulesContent"
+	rules.bbcode_enabled = true
+	rules.scroll_active = true
+	rules.fit_content = false
+	rules.selection_enabled = false
+	rules.custom_minimum_size = Vector2(275, 375)
+	rules.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rules.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rules.add_theme_font_size_override("normal_font_size", 16)
+	rules.add_theme_color_override("default_color", LIGHT)
+	rules.add_theme_constant_override("line_separation", 5)
+	rules.add_theme_stylebox_override(
+		"normal",
+		make_style(Color("#20102F"), Color("#6C3C91"), 12)
 	)
+	# The text is deliberately split into short sections with highlighted
+	# keywords and concrete examples, readable on a phone without zooming.
+	rules.text = (
+		"[center][font_size=25][color=#E9C0FF][b]🃏 JOKERSHIFT[/b][/color][/font_size][/center]\n"
+		+ "[center][color=#BE9FD6]«Дурак», переводы и особые карты[/color][/center]\n\n"
 
-	rules.custom_minimum_size = Vector2(280, 355)
+		+ "[font_size=20][color=#FFD18C][b]01  КАК ХОДИТЬ[/b][/color][/font_size]\n"
+		+ "Выбери карту внизу и нажми на свободную ячейку стола. "
+		+ "Можно просто [b]перетащить[/b] карту мышкой или пальцем.\n\n"
+		+ "[color=#D6ACFF]Чтобы отбиться:[/color] положи подходящую карту "
+		+ "[b]прямо на атакующую[/b]. Защита появится поверх неё.\n\n"
+
+		+ "[font_size=20][color=#FFD18C][b]02  ПОДКИДЫВАНИЕ И «БИТО»[/b][/color][/font_size]\n"
+		+ "Подкидывать можно достоинства карт, уже появившихся на столе. "
+		+ "Стол вмещает [b]2 ряда по 5 мест[/b].\n"
+		+ "В первой взятке — максимум [b]8 атак[/b], затем — до [b]10[/b]. "
+		+ "Но карт нельзя подкинуть больше, чем сможет принять защитник.\n"
+		+ "[color=#D6ACFF]Пример:[/color] бот отбил 4 карты, а в руке у него 2. "
+		+ "Можно подкинуть [b]ещё 2[/b].\n"
+		+ "[b]Бито![/b] — когда все атаки отбиты. [b]Забрать[/b] — "
+		+ "взять карты со стола, если не можешь защититься.\n\n"
+
+		+ "[font_size=20][color=#FFD18C][b]03  КОЗЫРИ[/b][/color][/font_size]\n"
+		+ "Обычный козырь — одна масть. Красный джокер в колоде "
+		+ "означает козыри [color=#FF6D89]♥ червы + ♦ бубны[/color]; "
+		+ "чёрный — [color=#C0B3FF]♠ пики + ♣ трефы[/color]. "
+		+ "Метка открывает игру [b]без козыря[/b].\n\n"
+
+		+ "[font_size=20][color=#FFD18C][b]04  ДЖОКЕР И МЕТКА[/b][/color][/font_size]\n"
+		+ "[color=#E5BDFF][b]Джокер[/b][/color] копирует [b]любую карту на столе[/b]: "
+		+ "атаку, защиту, уже сыгранного джокера и даже метку. "
+		+ "При выборе видно, [b]что именно он скопировал[/b]. "
+		+ "Его можно использовать для защиты или перевода.\n"
+		+ "[color=#E5BDFF][b]Метка[/b][/color] отбивает любую атаку. "
+		+ "Обычную карту нельзя использовать для защиты от метки.\n\n"
+
+		+ "[font_size=20][color=#FFD18C][b]05  ПЕРЕВОД И ЗАМЕНА[/b][/color][/font_size]\n"
+		+ "[b]Перевод:[/b] положи карту того же достоинства в "
+		+ "[b]пустую ячейку[/b], пока атаки ещё не отбиты. "
+		+ "Теперь защищается соперник.\n"
+		+ "[b]Замена защиты:[/b] можно положить более экономную "
+		+ "подходящую карту на свою защиту. Старая вернётся в руку, "
+		+ "но бот сможет подкинуть карту её достоинства.\n\n"
+
+		+ "[font_size=20][color=#FFD18C][b]06  ДОБОР И ПОБЕДА[/b][/color][/font_size]\n"
+		+ "Нажимай [b]«Добрать»[/b], чтобы взять 1 карту, "
+		+ "пока в руке меньше 6. Бот при защите может добирать "
+		+ "из колоды, но не выше [b]6 карт[/b].\n"
+		+ "После окончания колоды побеждает тот, кто первым "
+		+ "избавится от карт. Если остались только джокер или "
+		+ "метка, [b]это не поражение, пока тебя атакуют[/b]: "
+		+ "ими ещё можно отбиться.\n\n"
+
+		+ "[center][color=#C9A3E8]✦ Удачной партии! ✦[/color][/center]"
+	)
 	rules_dialog.add_child(rules)
 
 	joker_dialog = ConfirmationDialog.new()
@@ -1414,7 +1474,12 @@ func create_dialogs() -> void:
 
 
 func show_rules() -> void:
-	rules_dialog.popup_centered()
+	# Make the dialog big enough to read yet smaller than the screen,
+	# in portrait or landscape. RichTextLabel scrolls on narrow devices.
+	var viewport: Vector2 = get_viewport_rect().size
+	var width: int = int(minf(540.0, maxf(288.0, viewport.x - 24.0)))
+	var height: int = int(minf(690.0, maxf(330.0, viewport.y - 30.0)))
+	rules_dialog.popup_centered(Vector2i(width, height))
 
 
 # ==========================================
