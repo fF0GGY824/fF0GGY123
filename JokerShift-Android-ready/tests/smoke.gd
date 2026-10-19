@@ -32,6 +32,14 @@ func _run() -> void:
 	root.add_child(game)
 	verify(game.menu_screen != null and game.game_screen != null, "Original menu and game screen initialize")
 	verify(game.rules_dialog != null and game.joker_dialog != null, "Rules and joker selection dialogs initialize")
+	# Readable, phone-friendly help: BBCode headings and own scroll view.
+	var rules_content: RichTextLabel = game.rules_dialog.find_child("RulesContent", true, false) as RichTextLabel
+	verify(rules_content != null, "Rules window has a rich-text reading panel")
+	if rules_content != null:
+		verify(rules_content.bbcode_enabled and rules_content.scroll_active, "Formatted rules support scrolling in portrait mode")
+		verify(rules_content.text.contains("ПОДКИДЫВАНИЕ") and rules_content.text.contains("ДЖОКЕР"), "Rules have short highlighted sections")
+		verify(rules_content.text.contains("ещё 2") and rules_content.text.contains("пока тебя атакуют"), "Rules explain six-card throw cap and final Joker defense")
+
 	game.start_game()
 	verify(game.game_screen.visible and not game.menu_screen.visible, "Start button shows the game")
 	# Regression: the player nickname used to wrap into a thin vertical strip,
