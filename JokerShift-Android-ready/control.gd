@@ -1928,7 +1928,9 @@ func can_transfer() -> bool:
 	if table_cards.is_empty():
 		return false
 
-	if table_cards.size() >= defender_attack_limit():
+	# Translation moves the attack to the other player. The original
+	# defender's remaining hand must NOT limit the new defender.
+	if table_cards.size() >= round_limit():
 		return false
 	if free_table_slot() == -1:
 		return false
