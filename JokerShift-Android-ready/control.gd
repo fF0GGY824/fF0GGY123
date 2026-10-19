@@ -60,6 +60,15 @@ var result_dialog: AcceptDialog
 var joker_dialog: ConfirmationDialog
 var joker_options: VBoxContainer
 
+var enemy_backs: HBoxContainer
+var enemy_back_scroll: ScrollContainer
+var motion_layer: Control
+var animation_busy: bool = false
+var animation_serial: int = 0
+var animation_enabled: bool = true
+var last_enemy_visual_key: String = ""
+var remembered_table_faces: Dictionary = {}
+
 var bot_label: Label
 var player_label: Label
 var deck_label: Label
@@ -540,6 +549,34 @@ func make_button(
 	return button
 
 
+func make_card_back(width: float = 49.0, height: float = 66.0) -> PanelContainer:
+	var back: PanelContainer = PanelContainer.new()
+	back.custom_minimum_size = Vector2(width, height)
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back.add_theme_stylebox_override(
+		"panel", make_style(Color("#51218C"), Color("#E2B6FF"), 9)
+	)
+	var symbol: Label = make_label("✦\nJS", 13, GOLD)
+	symbol.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back.add_child(symbol)
+	return back
+
+
+func refresh_enemy_backs() -> void:
+	if enemy_backs == null:
+		return
+	var key: String = str(bot_hand.size()) + "|" + str(snapped(card_width, 1.0))
+	if key == last_enemy_visual_key:
+		return
+	last_enemy_visual_key = key
+	clear_children(enemy_backs)
+	var back_width: float = clampf(card_width * 0.62, 32.0, 58.0)
+	for i in range(bot_hand.size()):
+		var back: PanelContainer = make_card_back(back_width, back_width * 1.34)
+		back.name = "EnemyBack_%d" % i
+		enemy_backs.add_child(back)
+
+
 func clear_children(node: Node) -> void:
 	for child in node.get_children():
 		node.remove_child(child)
@@ -878,6 +915,13 @@ func create_game_screen() -> void:
 
 	add_child(game_screen)
 
+	# Transparent overlay for moving cards. It NEVER intercepts touches.
+	motion_layer = Control.new()
+	motion_layer.name = "CardMotionLayer"
+	motion_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	game_screen.add_child(motion_layer)
+	motion_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
 	# Keep the hand and action buttons accessible on short or landscape
 	# screens. This prevents the main column from being clipped.
 	var screen_scroll: ScrollContainer = ScrollContainer.new()
@@ -935,6 +979,20 @@ func create_game_screen() -> void:
 	# Счётчик бота.
 	bot_label = make_label("", 16)
 	root.add_child(bot_label)
+
+	# Visible opponent cards, backs only.
+	enemy_back_scroll = ScrollContainer.new()
+	enemy_back_scroll.name = "EnemyCards"
+	enemy_back_scroll.custom_minimum_size = Vector2(0, 69)
+	enemy_back_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	enemy_back_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	enemy_back_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	root.add_child(enemy_back_scroll)
+
+	enemy_backs = HBoxContainer.new()
+	enemy_backs.name = "EnemyCardBacks"
+	enemy_backs.add_theme_constant_override("separation", -12)
+	enemy_back_scroll.add_child(enemy_backs)
 
 	# Five slots in each of two rows. Portrait stacks the compact
 	# trump/deck information underneath the table; landscape uses a rail.
@@ -1252,6 +1310,12 @@ func new_game() -> void:
 	last_table_visual_key = ""
 	last_hand_visual_key = ""
 	replaced_throw_ranks.clear()
+	remembered_table_faces.clear()
+	last_enemy_visual_key = ""
+	animation_serial += 1
+	animation_busy = false
+	if motion_layer != null:
+		clear_children(motion_layer)
 	deck.clear()
 	player_hand.clear()
 	bot_hand.clear()
@@ -2777,6 +2841,7 @@ func update_ui() -> void:
 	if not game_screen.visible:
 		return
 
+	refresh_enemy_backs()
 	bot_label.text = (
 		"КОМПЬЮТЕР · %d карт"
 		% bot_hand.size()
