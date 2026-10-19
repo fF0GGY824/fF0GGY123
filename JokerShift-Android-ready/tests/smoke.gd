@@ -255,7 +255,7 @@ func _run() -> void:
 	game.player_hand = [joker.duplicate(true)]
 	game.bot_hand = [normal_card(2, "♣"), normal_card(3, "♣")]
 	game.show_joker_choices("defend", 0, 0)
-	verify(game.joker_options.get_child_count() == 5, "Joker choice dialog offers attack cards, defense cards, Mark and played Joker")
+	verify(game.joker_options.get_child_count() == 6, "Joker choice dialog offers all six distinct visible card values, including Mark and copied Joker")
 	game.choose_joker(mark)
 	verify(game.is_joker(game.table_cards[0]["defense"]) and game.card_rank(game.table_cards[0]["defense"]) == 100, "Chosen copied Mark is stored on the table as a Joker")
 	var mark_joker_view: Variant = game.make_card_view(joker_mark_copy, "hand", -1, -1)
