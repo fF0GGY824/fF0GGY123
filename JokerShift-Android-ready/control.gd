@@ -204,41 +204,7 @@ class GameCard extends Button:
 			add_child(face)
 			face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-			# A CanvasItem parent's _draw() appears BEHIND its children.
-			# This overlay must be a child added AFTER the atlas texture.
-			if game.is_joker(card) and game.card_rank(card) >= 2:
-				var copy_text: String = (
-					"J → МЕТКА" if game.card_rank(card) == 100
-					else (
-						"J → "
-						+ game.rank_name(game.card_rank(card))
-						+ game.card_suit(card)
-					)
-				)
-				var copy_bar: PanelContainer = PanelContainer.new()
-				copy_bar.name = "JokerCopiedValue"
-				copy_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				copy_bar.anchor_top = 1.0
-				copy_bar.anchor_bottom = 1.0
-				copy_bar.anchor_left = 0.0
-				copy_bar.anchor_right = 1.0
-				copy_bar.offset_top = -25.0
-				copy_bar.offset_bottom = -1.0
-				copy_bar.add_theme_stylebox_override(
-					"panel",
-					game.make_style(
-						Color(0.09, 0.02, 0.14, 0.97),
-						game.GOLD,
-						5
-					)
-				)
-				add_child(copy_bar)
-				var copy_label: Label = game.make_label(
-					copy_text, 11, game.LIGHT
-				)
-				copy_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-				copy_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				copy_bar.add_child(copy_label)
+			add_joker_copy_badge()
 
 			mouse_entered.connect(_hover.bind(true))
 			mouse_exited.connect(_hover.bind(false))
@@ -296,6 +262,76 @@ class GameCard extends Button:
 		corner.offset_top = 3.0
 		corner.offset_bottom = 24.0
 		add_child(corner)
+		add_joker_copy_badge()
+
+	func add_joker_copy_badge() -> void:
+		if not game.is_joker(card):
+			return
+
+		if game.card_rank(card) < 2:
+			tooltip_text = "Джокер ещё ничего не скопировал"
+			return
+
+		var copy_value: String = game.joker_copy_label(card)
+		tooltip_text = "ДЖОКЕР СКОПИРОВАЛ: " + copy_value
+
+		var suit: String = game.card_suit(card)
+		var accent: Color = Color("#E3B9FF")
+		match suit:
+			"♥":
+				accent = Color("#FF5C6C")
+			"♦":
+				accent = Color("#53E4FF")
+			"♣":
+				accent = Color("#C879FF")
+			"♠":
+				accent = Color("#FF6BD7")
+			_:
+				if game.card_rank(card) == 100:
+					accent = Color("#E5C26A")
+
+		var badge: PanelContainer = PanelContainer.new()
+		badge.name = "JokerCopiedValue"
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.anchor_left = 0.03
+		badge.anchor_right = 0.97
+		badge.anchor_top = 0.34
+		badge.anchor_bottom = 0.87
+		badge.offset_left = 0
+		badge.offset_right = 0
+		badge.offset_top = 0
+		badge.offset_bottom = 0
+		badge.add_theme_stylebox_override(
+			"panel",
+			game.make_style(
+				Color(0.06, 0.02, 0.11, 0.97),
+				accent,
+				7
+			)
+		)
+		add_child(badge)
+
+		var content: VBoxContainer = VBoxContainer.new()
+		content.name = "CopyInfo"
+		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_theme_constant_override("separation", 0)
+		badge.add_child(content)
+
+		var heading: Label = game.make_label("КОПИЯ", 9, game.LIGHT)
+		heading.name = "CopyTitle"
+		heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		heading.autowrap_mode = TextServer.AUTOWRAP_OFF
+		content.add_child(heading)
+
+		var big_value: Label = game.make_label(
+			copy_value,
+			18 if game.card_rank(card) != 100 else 12,
+			accent
+		)
+		big_value.name = "CopiedCard"
+		big_value.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		big_value.autowrap_mode = TextServer.AUTOWRAP_OFF
+		content.add_child(big_value)
 
 	func _hover(active: bool) -> void:
 		if not is_inside_tree():
@@ -312,31 +348,8 @@ class GameCard extends Button:
 		)
 
 	func _draw() -> void:
-		# Atlas art already contains ranks and suits. A copied Joker
-		# displays exactly which rank/suit it copied as a clear label.
+		# Original art is a child; the badge sits over it.
 		if game.card_atlas != null and game.card_face_texture(card) != null:
-			if game.is_joker(card) and game.card_rank(card) >= 2:
-				var copied_text: String = (
-					"J → МЕТКА" if game.card_rank(card) == 100
-					else (
-						"J → "
-						+ game.rank_name(game.card_rank(card))
-						+ game.card_suit(card)
-					)
-				)
-				draw_rect(
-					Rect2(2.0, size.y - 22.0, size.x - 4.0, 20.0),
-					Color(0.08, 0.02, 0.15, 0.96)
-				)
-				draw_string(
-					get_theme_default_font(),
-					Vector2(4.0, size.y - 6.0),
-					copied_text,
-					HORIZONTAL_ALIGNMENT_LEFT,
-					-1,
-					maxi(9, int(size.x * 0.14)),
-					Color("#F5E8FF")
-				)
 			return
 
 		if card.is_empty():
@@ -410,28 +423,6 @@ class GameCard extends Button:
 				HORIZONTAL_ALIGNMENT_LEFT,
 				-1,
 				caption_size,
-				ink
-			)
-
-		if game.is_joker(card):
-			var subtitle: String = "ДЖОКЕР"
-
-			if game.card_rank(card) == 100:
-				subtitle = "→ МЕТКА"
-			elif game.card_rank(card) >= 2:
-				subtitle = (
-					"→ "
-					+ game.rank_name(game.card_rank(card))
-					+ game.card_suit(card)
-				)
-
-			draw_string(
-				font,
-				Vector2(5.0, size.y - 8.0),
-				subtitle,
-				HORIZONTAL_ALIGNMENT_LEFT,
-				-1,
-				maxi(9, int(11.0 * factor)),
 				ink
 			)
 
@@ -1809,6 +1800,15 @@ func card_name(card: Dictionary) -> String:
 	)
 
 
+# The badge and game tooltip use the exact saved Joker copy.
+func joker_copy_label(card: Dictionary) -> String:
+	if not is_joker(card) or card_rank(card) < 2:
+		return "НЕТ КОПИИ"
+	if card_rank(card) == 100:
+		return "МЕТКА"
+	return rank_name(card_rank(card)) + card_suit(card)
+
+
 func is_trump(card: Dictionary) -> bool:
 	var suit: String = card_suit(card)
 
@@ -2085,10 +2085,23 @@ func field_pressed() -> void:
 func table_card_pressed(role: String, pair_index: int) -> void:
 	if pair_index < 0 or pair_index >= table_cards.size():
 		return
+
 	var slot_id: int = slot_for_pair(pair_index)
 	if selected_index >= 0:
 		place_selected_on_slot(slot_id)
-	elif role == "attack" and attacker == 1:
+		return
+
+	var target: Dictionary = (
+		table_cards[pair_index]["attack"]
+		if role == "attack"
+		else table_cards[pair_index]["defense"]
+	)
+	if not target.is_empty() and is_joker(target):
+		status_text = "ДЖОКЕР СКОПИРОВАЛ: " + joker_copy_label(target)
+		update_ui()
+		return
+
+	if role == "attack" and attacker == 1:
 		selected_pair = pair_index
 		status_text = "Выбери карту для защиты и нажми на атаку."
 		update_ui()
